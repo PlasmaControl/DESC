@@ -4,19 +4,13 @@ Functions in this module should not depend on any other submodules in desc.objec
 """
 
 import numpy as np
+import scipy.sparse as sps
+from scipy.sparse.csgraph import connected_components
 
 from desc.backend import jit, jnp, put, softargmax
 from desc.batching import vmap_chunked
 from desc.io import IOAble
-from desc.utils import (
-    Index,
-    errorif,
-    flatten_list,
-    jit_if_possible,
-    svd_inv_null,
-    unique_list,
-    warnif,
-)
+from desc.utils import errorif, flatten_list, jit_if_possible, unique_list, warnif
 
 
 def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa: C901
@@ -81,14 +75,15 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     from desc.optimize.utils import scatter_rows
 
     # particular solution to Ax=b
-    xp = jnp.zeros(objective.dim_x)
+    xp = np.zeros(objective.dim_x)
 
     # linear constraints Ax=b. Since the constraints are linear, the columns of A are
     # the constraints evaluated at the unit vectors, without any differentiation.
-    x0 = jnp.zeros(constraint.dim_x)
+    n = constraint.dim_x
     f, target = _compute_at_unit_vectors(constraint)
-    A_full = (f[1:] - f[0]).T
-    b_full = target - f[0]
+    f = np.asarray(f)
+    A_full = sps.csr_matrix((f[1:] - f[0]).T)
+    b_full = np.asarray(target) - f[0]
 
     if isinstance(objective, ProximalProjection):
         # remove cols of A corresponding to ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]
@@ -104,33 +99,33 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
             else:  # non-Equilibrium args are always included
                 cols = np.append(cols, np.arange(c, c + t.dim_x))
                 c += t.dim_x
-        A = A_full[:, cols]
+        # things that are not in the constraint are unconstrained, so 0 columns
+        A_full.resize(A_full.shape[0], max(n, c))
     else:
-        cols = np.arange(constraint.dim_x)
-        A = A_full
+        cols = np.arange(n)
+    A = A_full.tocsc()[:, cols].tocsr()
     assert A.shape[1] == xp.size
 
     # check for degenerate rows and delete if necessary
-    # augment A with b so that it only deletes actual degenerate constraints
+    # compare b too so that it only deletes actual degenerate constraints
     # which are duplicate rows of A that also have duplicate entries of b,
     # if the entries of b aren't the same then the constraints are actually
     # incompatible and so we will leave those to be caught later.
-    A_augmented = np.hstack([A, np.reshape(b_full, (A.shape[0], 1))])
-
-    # Find unique rows of A_augmented
-    _, unique_indices = np.unique(A_augmented, axis=0, return_index=True)
-
-    # Sort the indices to preserve the order of appearance
-    unique_indices = np.sort(unique_indices)
+    unique_rows = {}
+    for i in range(A.shape[0]):
+        row = slice(A.indptr[i], A.indptr[i + 1])
+        key = (A.indices[row].tobytes(), A.data[row].tobytes(), b_full[i])
+        unique_rows.setdefault(key, i)
+    # first appearance of each unique row, in the order of appearance
+    unique_indices = np.fromiter(unique_rows.values(), dtype=int)
     # Find the indices of the degenerate rows
-    degenerate_idx = np.setdiff1d(np.arange(A_augmented.shape[0]), unique_indices)
+    degenerate_idx = np.setdiff1d(np.arange(A.shape[0]), unique_indices)
 
     # Extract the unique rows
-    A_augmented = A_augmented[unique_indices]
-    A = A_augmented[:, :-1]
-    b = np.atleast_1d(A_augmented[:, -1].squeeze())
+    A = A[unique_indices]
+    b = b_full[unique_indices]
 
-    A_nondegenerate = A.copy()
+    A_nondegenerate = A
 
     # remove fixed parameters from A and b
     A, b, xp, unfixed_idx, fixed_idx = remove_fixed_parameters(A, b, xp)
@@ -149,16 +144,16 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     D = np.where(np.abs(x_scale) < 1e2, 1, np.abs(x_scale))
 
     # null space & particular solution
-    A = A * D[None, unfixed_idx]
+    A = A.toarray() * D[None, unfixed_idx]
     if A.size:
-        A_inv, Z = svd_inv_null(A)
+        A_inv, Z = _block_inv_null(A)
     else:
         A_inv = A.T
         Z = np.eye(A.shape[1])
     xp = put(xp, unfixed_idx, A_inv @ b)
     xp = put(xp, fixed_idx, ((1 / D) * xp)[fixed_idx])
     # error of the constraints at the particular solution, checked below
-    f = np.asarray(A_full @ put(x0, cols, D * xp) - b_full)
+    f = A_full @ put(np.zeros(A_full.shape[1]), cols, D * xp) - b_full
     # cast to jnp arrays
     xp = jnp.asarray(xp)
     A = jnp.asarray(A)
@@ -260,6 +255,44 @@ def _compute_at_unit_vectors(constraint):
         jnp.eye(n + 1, n, k=-1)
     )
     return f, constraint.target_scaled
+
+
+def _block_inv_null(A):
+    """Compute pseudo-inverse and null space of a matrix block by block.
+
+    Rows and columns of A that share a nonzero are grouped into independent blocks,
+    and each block gets its own SVD. Equivalent to ``desc.utils.svd_inv_null`` up to
+    the choice of the null space basis, and the same thing if A is a single block.
+    """
+    M, N = A.shape
+    S = sps.csr_matrix(A)
+    _, labels = connected_components(sps.bmat([[None, S], [S.T, None]]))
+    # rows and columns of each block, the columns are numbered after the rows
+    order = np.argsort(labels, kind="stable")
+    svds = []
+    for idx in np.split(order, np.cumsum(np.bincount(labels))[:-1]):
+        r, c = idx[idx < M], idx[idx >= M] - M
+        if r.size and c.size:
+            # only large blocks are worth sending to the device
+            svd = jnp.linalg.svd if r.size * c.size > 1e6 else np.linalg.svd
+            usv = svd(A[np.ix_(r, c)], full_matrices=True)
+            svds += [(r, c, *map(np.asarray, usv))]
+    # singular values are sorted, so the first ``rank`` of them are the nonzero ones
+    tol = max((s[0] for *_, s, _ in svds), default=0)
+    tol *= np.finfo(A.dtype).eps * max(M, N)
+    ranks = [np.count_nonzero(s > tol) for *_, s, _ in svds]
+
+    Ainv = np.zeros((N, M))
+    Z = np.zeros((N, N - sum(ranks)))
+    # columns that are not in any constraint are free
+    free = np.flatnonzero(S.getnnz(axis=0) == 0)
+    Z[free, np.arange(free.size)] = 1
+    k = free.size
+    for (r, c, u, s, vh), rank in zip(svds, ranks):
+        Ainv[np.ix_(c, r)] = (vh[:rank].T / s[:rank]) @ u[:, :rank].T
+        Z[c, k : k + c.size - rank] = vh[rank:].T
+        k += c.size - rank
+    return Ainv, Z
 
 
 class _Project(IOAble):
@@ -469,7 +502,7 @@ def remove_fixed_parameters(A, b, xp):
 
     Parameters
     ----------
-    A : ndarray
+    A : ndarray or scipy sparse matrix
         Constraint matrix.
     b : ndarray
         RHS vector.
@@ -478,7 +511,7 @@ def remove_fixed_parameters(A, b, xp):
 
     Returns
     -------
-    A : ndarray
+    A : scipy.sparse.csr_matrix
         Constraint matrix with fixed parameters removed.
     b : ndarray
         RHS vector with fixed parameters removed.
@@ -489,48 +522,34 @@ def remove_fixed_parameters(A, b, xp):
     fixed_idx : ndarray
         Indices of the fixed parameters
     """
-    # will store the global index of the unfixed rows, idx
-    indices_row = np.arange(A.shape[0])
+    A = sps.csr_matrix(A)
+    # will store the global index of the unfixed idx
     indices_idx = np.arange(A.shape[1])
 
-    while len(np.where(np.count_nonzero(A, axis=1) == 1)[0]):
+    while True:
         # fixed just means there is a single element in A, so A_ij*x_j = b_i
-        fixed_rows = np.where(np.count_nonzero(A, axis=1) == 1)[0]
+        fixed_rows = np.where(A.getnnz(axis=1) == 1)[0]
+        if not fixed_rows.size:
+            break
         # indices of x that are fixed = cols of A where rows have 1 nonzero val.
-        _, fixed_idx = np.where(A[fixed_rows])
+        fixed_idx = A[fixed_rows].indices
         unfixed_rows = np.setdiff1d(np.arange(A.shape[0]), fixed_rows)
         unfixed_idx = np.setdiff1d(np.arange(A.shape[1]), fixed_idx)
 
-        # find the global index of the fixed variables of this iteration
-        global_fixed_idx = indices_idx[fixed_idx]
-        # find the global index of the unfixed variables by removing the fixed variables
-        # from the indices arrays.
-        indices_idx = np.delete(indices_idx, fixed_idx)  # fixed indices are removed
-        indices_row = np.delete(indices_row, fixed_rows)  # fixed rows are removed
-
-        if len(fixed_rows):
-            # something like 0.5 x1 = 2 is the same as x1 = 4
-            b = put(b, fixed_rows, b[fixed_rows] / np.sum(A[fixed_rows], axis=1))
-            A = put(
-                A,
-                Index[fixed_rows, :],
-                A[fixed_rows] / np.sum(A[fixed_rows], axis=1)[:, None],
-            )
-            xp = put(xp, global_fixed_idx, b[fixed_rows])
-            # Some values might be fixed, but they still show up in other constraints
-            # this is where the fixed cols have >1 nonzero val.
-            # For fixed variables, we delete that row and col of A, but that means
-            # we need to subtract the fixed value from b so that the equation is
-            # balanced.
-            # e.g., 2 x1 + 3 x2 + 1 x3 = 4 ; 4 x1 = 2
-            # combining gives 3 x2 + 1 x3 = 3, with x1 now removed
-            b = put(
-                b,
-                unfixed_rows,
-                b[unfixed_rows] - A[unfixed_rows][:, fixed_idx] @ b[fixed_rows],
-            )
+        # something like 0.5 x1 = 2 is the same as x1 = 4
+        b = put(b, fixed_rows, b[fixed_rows] / A[fixed_rows].data)
+        # set the fixed variables of this iteration, by their global index
+        xp = put(xp, indices_idx[fixed_idx], b[fixed_rows])
+        # Some values might be fixed, but they still show up in other constraints
+        # this is where the fixed cols have >1 nonzero val.
+        # For fixed variables, we delete that row and col of A, but that means
+        # we need to subtract the fixed value from b so that the equation is
+        # balanced.
+        # e.g., 2 x1 + 3 x2 + 1 x3 = 4 ; 4 x1 = 2
+        # combining gives 3 x2 + 1 x3 = 3, with x1 now removed
+        b = b[unfixed_rows] - A[unfixed_rows][:, fixed_idx] @ b[fixed_rows]
         A = A[unfixed_rows][:, unfixed_idx]
-        b = b[unfixed_rows]
+        indices_idx = np.delete(indices_idx, fixed_idx)  # fixed indices are removed
 
     unfixed_idx = indices_idx
     fixed_idx = np.delete(np.arange(xp.size), unfixed_idx)

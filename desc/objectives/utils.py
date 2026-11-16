@@ -258,11 +258,10 @@ def _compute_at_unit_vectors(constraint):
 
 
 def _block_inv_null(A):
-    """Compute pseudo-inverse and null space of a matrix block by block.
+    """Compute pseudo-inverse and null space of a sparse matrix.
 
     Rows and columns of A that share a nonzero are grouped into independent blocks,
-    and each block gets its own SVD. Equivalent to ``desc.utils.svd_inv_null`` up to
-    the choice of the null space basis, and the same thing if A is a single block.
+    and each block gets its own SVD. Equivalent to ``desc.utils.svd_inv_null``.
     """
     M, N = A.shape
     S = sps.csr_matrix(A)
@@ -275,24 +274,55 @@ def _block_inv_null(A):
         if r.size and c.size:
             # only large blocks are worth sending to the device
             svd = jnp.linalg.svd if r.size * c.size > 1e6 else np.linalg.svd
-            usv = svd(A[np.ix_(r, c)], full_matrices=True)
+            usv = svd(A[np.ix_(r, c)], full_matrices=False)
             svds += [(r, c, *map(np.asarray, usv))]
-    # singular values are sorted, so the first ``rank`` of them are the nonzero ones
+    # singular values are sorted, so the first ``k`` of them are the nonzero ones
     tol = max((s[0] for *_, s, _ in svds), default=0)
     tol *= np.finfo(A.dtype).eps * max(M, N)
-    ranks = [np.count_nonzero(s > tol) for *_, s, _ in svds]
-
     Ainv = np.zeros((N, M))
-    Z = np.zeros((N, N - sum(ranks)))
-    # columns that are not in any constraint are free
-    free = np.flatnonzero(S.getnnz(axis=0) == 0)
-    Z[free, np.arange(free.size)] = 1
-    k = free.size
-    for (r, c, u, s, vh), rank in zip(svds, ranks):
-        Ainv[np.ix_(c, r)] = (vh[:rank].T / s[:rank]) @ u[:, :rank].T
-        Z[c, k : k + c.size - rank] = vh[rank:].T
-        k += c.size - rank
-    return Ainv, Z
+    rank = 0
+    for r, c, u, s, vh in svds:
+        k = np.count_nonzero(s > tol)
+        Ainv[np.ix_(c, r)] = (vh[:k].T / s[:k]) @ u[:, :k].T
+        rank += k
+    return Ainv, _householder_null(A, rank)
+
+
+def _householder_null(A, rank):
+    """Compute null space of a sparse matrix from its Householder LQ factorization.
+
+    This is the basis that the SVD in ``desc.utils.svd_inv_null`` returns for a full
+    rank A with more columns than rows, the optimizers are sensitive to the basis.
+    """
+    M, N = A.shape
+    P = min(M, N)
+    tol = np.finfo(A.dtype).eps * np.abs(A).max()
+    # A = L Q with Q the product of reflectors I - tau v v^T, v is kept in rows of L
+    L = A.copy()
+    tau = np.zeros(P)
+    for i in range(P):
+        c = np.r_[i, i + 1 + np.flatnonzero(L[i, i + 1 :])]
+        if c.size > 1:
+            beta = -np.copysign(np.linalg.norm(L[i, c]), L[i, i])
+            tau[i] = 1 - L[i, i] / beta
+            v = np.r_[1, L[i, c[1:]] / (L[i, i] - beta)]
+            w = L[i + 1 :, c] @ v
+            r = i + 1 + np.flatnonzero(w)
+            new = L[np.ix_(r, c)] - tau[i] * np.outer(w[r - i - 1], v)
+            # entries that cancel are zero, which keeps L sparse
+            L[np.ix_(r, c)] = np.where(np.abs(new) > tol, new, 0)
+            L[i, c] = np.r_[beta, v[1:]]
+    V = sps.csr_matrix(np.triu(L[:P], 1)) + sps.eye(P, N)
+    # null space of L, which is empty unless A is rank deficient
+    Y = np.linalg.svd(np.tril(L[:, :P]))[2][rank:].T if rank < P else np.zeros((P, 0))
+    K = sps.block_diag([sps.csr_matrix(Y), sps.eye(N - P)], format="csr")
+    # Z = Q^T K with Q^T = I - V^T T V, where T^-1 = 1 / tau + triu(V V^T, 1)
+    U = sps.diags(tau) @ sps.triu(V @ V.T, 1)
+    X = dX = sps.diags(tau) @ (V @ K)
+    while dX.nnz:
+        dX = -(U @ dX)
+        X = X + dX
+    return (K - V.T @ X).toarray()
 
 
 class _Project(IOAble):

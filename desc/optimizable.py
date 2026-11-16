@@ -68,7 +68,7 @@ class Optimizable(ABC):
         idx = {}
         dim_x = 0
         for arg in self.optimizable_params:
-            idx[arg] = jnp.arange(dim_x, dim_x + dimensions[arg])
+            idx[arg] = np.arange(dim_x, dim_x + dimensions[arg])
             dim_x += dimensions[arg]
         return idx
 

@@ -919,6 +919,43 @@ def jaxify(func, abstract_eval, vectorized=False, abs_step=1e-4, rel_step=0):
     return define_fd_jvp(wrap_pure_callback(func))
 
 
+def jit_if_possible(func=None, *, static_argnames=("op",)):
+    """Jit a function unless the objective it is called with has ``use_jit=False``.
+
+    Can be used as a decorator with or without arguments. The decision is made at
+    each call, from the ``_use_jit`` attribute of the first positional argument.
+
+    Parameters
+    ----------
+    func : callable
+        Function to jit. Its first positional argument must be the objective, eg an
+        ``ObjectiveFunction``, that decides whether the compiled version is used.
+    static_argnames : tuple of str
+        Names of the arguments of ``func`` to treat as static when compiling. Pass
+        an empty tuple if ``func`` has no ``op`` argument.
+
+    Returns
+    -------
+    wrapper : callable
+        Function with the same signature as ``func``.
+
+    """
+    if func is None:
+        return functools.partial(jit_if_possible, static_argnames=static_argnames)
+    jitted_func = functools.partial(jit, static_argnames=list(static_argnames))(func)
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        # first arg has to be ObjectiveFunction
+        obj = args[0]
+        if getattr(obj, "_use_jit", False):
+            return jitted_func(*args, **kwargs)
+        else:
+            return func(*args, **kwargs)
+
+    return wrapper
+
+
 def dot(a, b, axis=-1):
     """Batched coordinate dot product.
 

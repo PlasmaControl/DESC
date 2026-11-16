@@ -413,11 +413,11 @@ class Surface(IOAble, Optimizable, ABC):
         self._L = int(self._L)
         self._M = int(self._M)
         self._N = int(self._N)
-        # surface labels as strongly typed floats, as set by the constructors, so
-        # that surfaces loaded from older files have the same pytree leaf types
+        # surface labels as floats, as set by the constructors, so that surfaces
+        # loaded from older files have the same pytree leaf types
         for attr in ["_rho", "_zeta"]:
             if getattr(self, attr, None) is not None:
-                setattr(self, attr, jnp.float64(float(np.squeeze(getattr(self, attr)))))
+                setattr(self, attr, float(getattr(self, attr)))
 
     @property
     def name(self):

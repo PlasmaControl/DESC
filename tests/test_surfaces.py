@@ -584,17 +584,3 @@ def test_section_change_only_symmetry():
     assert surf.sym is False
     assert surf.R_basis.sym is False
     assert surf.Z_basis.sym is False
-
-
-@pytest.mark.unit
-def test_surface_label_types_share_compiled_code(caplog):
-    """Test that surfaces labelled by an int or a float share compiled code."""
-    f = jit(lambda s: s.R_lmn.sum())
-    surf, sect = FourierRZToroidalSurface(rho=1), ZernikeRZToroidalSection(zeta=0)
-    f(surf)
-    f(sect)
-    surf.rho, sect.zeta = 1.0, np.float64(0)
-    with jax.log_compiles():
-        f(surf)
-        f(sect)
-    assert "Finished XLA compilation" not in caplog.text

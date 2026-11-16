@@ -148,7 +148,7 @@ class FourierRZToroidalSurface(Surface):
         self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, 1:])
         self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, 1:])
         self._sym = bool(sym)
-        self._rho = jnp.float64(float(np.squeeze(rho)))
+        self._rho = float(rho)
 
         if check_orientation and self._compute_orientation() == -1:
             warnings.warn(
@@ -181,12 +181,12 @@ class FourierRZToroidalSurface(Surface):
     def rho(self):
         """float: Flux surface label."""
         if not (hasattr(self, "_rho")) or self._rho is None:
-            self._rho = jnp.float64(1.0)
+            self._rho = 1.0
         return self._rho
 
     @rho.setter
     def rho(self, rho):
-        self._rho = jnp.float64(float(np.squeeze(rho)))
+        self._rho = float(rho)
 
     @execute_on_cpu
     def change_resolution(self, *args, **kwargs):
@@ -972,7 +972,7 @@ class ZernikeRZToroidalSection(Surface):
         self._sym = bool(sym)
         self._spectral_indexing = str(spectral_indexing)
 
-        self._zeta = jnp.float64(float(np.squeeze(zeta)))
+        self._zeta = float(zeta)
 
         if check_orientation and self._compute_orientation() == -1:
             warnings.warn(
@@ -1007,7 +1007,7 @@ class ZernikeRZToroidalSection(Surface):
 
     @zeta.setter
     def zeta(self, zeta):
-        self._zeta = jnp.float64(float(np.squeeze(zeta)))
+        self._zeta = float(zeta)
 
     @execute_on_cpu
     def change_resolution(self, *args, **kwargs):

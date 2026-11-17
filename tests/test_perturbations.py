@@ -8,9 +8,11 @@ from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZCurve
 from desc.grid import ConcentricGrid, QuadratureGrid
 from desc.objectives import (
+    AspectRatio,
     ForceBalance,
     ObjectiveFunction,
     ToroidalCurrent,
+    Volume,
     get_equilibrium_objective,
     get_fixed_boundary_constraints,
     maybe_add_self_consistency,
@@ -330,3 +332,45 @@ def test_perturbation_boundary_axis_coupling(projection):
     # cost after the perturbation was ~4e4 f0 at both orders
     assert f[0] < 1e3 * f0
     assert f[1] < 0.1 * f[0]
+
+
+@pytest.mark.unit
+def test_optimal_perturb_boundary_axis_coupling():
+    """Test optimal_perturb with an m=0 boundary mode, whose change moves the axis.
+
+    As in test_perturbation_boundary_axis_coupling: dx/dc must be the change of the
+    particular solution of all the linear constraints (which moves Ra_n through the
+    axis self consistency), or the perturbed equilibrium has a force error linear in
+    the step.
+    """
+    eq = desc.examples.get("HELIOTRON")
+    objective = ObjectiveFunction(ForceBalance(eq))
+    objective.build(verbose=0)
+    f0 = objective.compute_scalar(objective.x(eq))
+
+    # only the m=0, n=1 boundary mode is free
+    dRb = np.zeros(eq.Rb_lmn.size, dtype=bool)
+    dRb[eq.surface.R_basis.get_idx(M=0, N=1)] = True
+    objective_g = ObjectiveFunction(
+        (
+            Volume(eq, target=1.2 * eq.compute("V")["V"]),
+            AspectRatio(eq, target=0.9 * eq.compute("R0/a")["R0/a"]),
+        )
+    )
+    eqp, _, _, dc, _, _ = optimal_perturb(
+        eq,
+        ObjectiveFunction(ForceBalance(eq)),
+        objective_g,
+        dRb=dRb,
+        order=2,
+        tr_ratio=[0.01, 0.25],
+        verbose=0,
+        copy=True,
+    )
+    # the step moves the mode by ~9 mm
+    assert np.linalg.norm(dc) > 5e-3
+    obj = ObjectiveFunction(ForceBalance(eqp))
+    obj.build(verbose=0)
+    # with the tangent of the pseudo-inverse of BoundaryRSelfConsistency alone, the
+    # cost after the perturbation was ~3e4 f0
+    assert obj.compute_scalar(obj.x(eqp)) < 1e2 * f0

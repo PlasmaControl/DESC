@@ -2,13 +2,12 @@
 
 import warnings
 
+import numpy as np
 from termcolor import colored
 
 from desc.backend import jnp, put, use_jax
 from desc.compute import profile_names
 from desc.objectives import (
-    BoundaryRSelfConsistency,
-    BoundaryZSelfConsistency,
     ObjectiveFunction,
     get_fixed_boundary_constraints,
     maybe_add_self_consistency,
@@ -16,8 +15,12 @@ from desc.objectives import (
 from desc.objectives.utils import factorize_linear_constraints
 from desc.optimize import LinearConstraintProjection
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
-from desc.optimize.utils import compute_jac_scale, evaluate_quadratic_form_jac
-from desc.utils import Timer, get_instance, warnif
+from desc.optimize.utils import (
+    compute_jac_scale,
+    evaluate_quadratic_form_jac,
+    scatter_rows,
+)
+from desc.utils import Timer, warnif
 
 __all__ = ["get_deltas", "perturb", "optimal_perturb"]
 
@@ -577,7 +580,7 @@ def optimal_perturb(  # noqa: C901
     constraint = ObjectiveFunction(constraints)
     constraint.build(verbose=verbose)
 
-    _, _, _, _, _, _, project, recover, *_ = factorize_linear_constraints(
+    _, _, _, _, D, unfixed_idx, project, recover, *_ = factorize_linear_constraints(
         objective_f, constraint
     )
 
@@ -596,27 +599,31 @@ def optimal_perturb(  # noqa: C901
     # dx/dx_reduced, ie D @ Z scattered into the full state vector
     dxdx_reduced = recover.feasible_tangents
 
-    # dx/dc
-    dxdc = []
-    xz = objective_f.unpack_state(jnp.zeros_like(xf), False)[0]
-
-    for arg in deltas:
-        if arg not in ["Rb_lmn", "Zb_lmn"]:
-            x_idx = eq.x_idx[arg]
-            dxdc.append(jnp.eye(eq.dim_x)[:, x_idx])
-        if arg == "Rb_lmn":
-            con = get_instance(constraints, BoundaryRSelfConsistency)
-            A = con.jac_unscaled(xz)[0]["R_lmn"]
-            Ainv = jnp.linalg.pinv(A)
-            dxdRb = jnp.eye(eq.dim_x)[:, eq.x_idx["R_lmn"]] @ Ainv
-            dxdc.append(dxdRb)
-        if arg == "Zb_lmn":
-            con = get_instance(constraints, BoundaryZSelfConsistency)
-            A = con.jac_unscaled(xz)[0]["Z_lmn"]
-            Ainv = jnp.linalg.pinv(A)
-            dxdZb = jnp.eye(eq.dim_x)[:, eq.x_idx["Z_lmn"]] @ Ainv
-            dxdc.append(dxdZb)
-    dxdc = jnp.hstack(dxdc)
+    # dx/dc: the change of the full state vector per unit change of c at fixed reduced
+    # coordinates, as in the tangents of perturb. The state is updated at the end with
+    # recover(x_reduced + dx_reduced), whose particular solution of the linear
+    # constraints is taken for the new c, so the derivatives must be taken along the
+    # change of that particular solution. For a parameter fixed by the constraints (eg.
+    # Rb_lmn) that is the minimum norm change of the unfixed ones that keeps all the
+    # constraints satisfied together, eg. R_lmn and Ra_n through both the boundary and
+    # the axis self consistency. Unfixed parameters in c (eg. R_lmn) only change by c.
+    c_x_idx = np.concatenate([np.asarray(eq.x_idx[key]) for key in deltas])
+    c_fixed = ~np.isin(c_x_idx, unfixed_idx)
+    dxdc = scatter_rows(eq.dim_x, c_x_idx, jnp.eye(c.size))
+    if np.any(c_fixed):
+        # a feasible change: c changes and the other parameters solve the constraints
+        # that involve them, which have targets that do not depend on c. The ones on c
+        # alone are the constraints that fix c, whose targets change with c.
+        A = np.asarray(constraint.jac_unscaled(jnp.zeros(constraint.dim_x)))
+        other_idx = np.setdiff1d(np.arange(eq.dim_x), c_x_idx[c_fixed])
+        rows = np.any(A[:, other_idx] != 0, axis=1)
+        dxdc_other = -jnp.linalg.pinv(A[rows][:, other_idx]) @ (
+            A[rows][:, c_x_idx] * c_fixed
+        )
+        dxdc += scatter_rows(eq.dim_x, other_idx, dxdc_other)
+        # the particular solution is the feasible change with no component along the
+        # null space of the constraints (in the variables scaled by D)
+        dxdc -= c_fixed * (dxdx_reduced @ (dxdx_reduced.T @ (dxdc / D[:, None] ** 2)))
 
     # 1st order
     if order > 0:

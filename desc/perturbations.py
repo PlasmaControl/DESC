@@ -7,8 +7,6 @@ from termcolor import colored
 from desc.backend import jnp, put, use_jax
 from desc.compute import profile_names
 from desc.objectives import (
-    AxisRSelfConsistency,
-    AxisZSelfConsistency,
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
     ObjectiveFunction,
@@ -235,61 +233,48 @@ def perturb(  # noqa: C901
     x_reduced = project(x)
 
     x_norm = jnp.linalg.norm(x_reduced)
-    xz = objective.unpack_state(jnp.zeros_like(x), False)[0]
 
     # perturbation vectors
     dx1_reduced = jnp.zeros_like(x_reduced)
     dx2_reduced = jnp.zeros_like(x_reduced)
     dx3_reduced = jnp.zeros_like(x_reduced)
 
-    # tangent vectors
-    tangents = jnp.zeros((eq.dim_x,))
-    if "Rb_lmn" in deltas.keys():
-        con = get_instance(constraints, BoundaryRSelfConsistency)
-        A = con.jac_unscaled(xz)[0]["R_lmn"]
-        Ainv = jnp.linalg.pinv(A)
-        dc = deltas["Rb_lmn"]
-        tangents += jnp.eye(eq.dim_x)[:, eq.x_idx["R_lmn"]] @ Ainv @ dc
-    if "Zb_lmn" in deltas.keys():
-        con = get_instance(constraints, BoundaryZSelfConsistency)
-        A = con.jac_unscaled(xz)[0]["Z_lmn"]
-        Ainv = jnp.linalg.pinv(A)
-        dc = deltas["Zb_lmn"]
-        tangents += jnp.eye(eq.dim_x)[:, eq.x_idx["Z_lmn"]] @ Ainv @ dc
-    if "Ra_n" in deltas.keys():
-        con = get_instance(constraints, AxisRSelfConsistency)
-        A = con.jac_unscaled(xz)[0]["R_lmn"]
-        Ainv = jnp.linalg.pinv(A)
-        dc = deltas["Ra_n"]
-        tangents += jnp.eye(eq.dim_x)[:, eq.x_idx["R_lmn"]] @ Ainv @ dc
-    if "Za_n" in deltas.keys():
-        con = get_instance(constraints, AxisZSelfConsistency)
-        A = con.jac_unscaled(xz)[0]["Z_lmn"]
-        Ainv = jnp.linalg.pinv(A)
-        dc = deltas["Za_n"]
-        tangents += jnp.eye(eq.dim_x)[:, eq.x_idx["Z_lmn"]] @ Ainv @ dc
-    # all other perturbations besides the boundary
-    other_args = [
-        arg
-        for arg in eq.optimizable_params
-        if arg not in ["Ra_n", "Za_n", "Rb_lmn", "Zb_lmn"]
-    ]
-    if len([arg for arg in other_args if arg in deltas.keys()]):
-        dc = jnp.concatenate(
-            [
-                deltas[arg]
-                for arg in other_args
-                if arg in deltas.keys() and arg in eq.optimizable_params
-            ]
+    # tangent vector: the change of the full state vector made by the perturbation at
+    # fixed reduced coordinates. The perturbed state is formed below as
+    # recover(x_reduced + dx_reduced) with the particular solution of the linear
+    # constraints for the new inputs, which is the minimum norm solution of all of them
+    # together (eg. the axis self-consistency ties R_lmn at rho=0 to Ra_n), so the
+    # derivatives must be taken along the change of that particular solution. A tangent
+    # from the pseudo-inverse of one constraint alone (eg. BoundaryRSelfConsistency for
+    # Rb_lmn) differs from it by an amount linear in the perturbation, which leaves a
+    # first order force error that no order of the perturbation removes.
+    eq_tmp = eq.copy()
+    for key, value in deltas.items():
+        setattr(eq_tmp, key, getattr(eq_tmp, key) + value)
+    if is_linear_proj:
+        obj.update_constraint_target(eq_tmp)
+        tangents = obj._recover(x_reduced) - x
+        obj.update_constraint_target(eq)
+        # the update replaces (and frees) the arrays taken from obj above
+        D, dxdx_reduced = obj._D, obj._recover.feasible_tangents
+    else:
+        for con in constraints:
+            if hasattr(con, "update_target"):
+                con.update_target(eq_tmp)
+        constraint_tmp = ObjectiveFunction(constraints)
+        constraint_tmp.build(verbose=0)
+        _, _, _, _, _, _, _, recover_tmp, *_ = factorize_linear_constraints(
+            objective, constraint_tmp
         )
-        x_idx = jnp.concatenate(
-            [
-                eq.x_idx[arg]
-                for arg in other_args
-                if arg in deltas.keys() and arg in eq.optimizable_params
-            ]
-        )
-        tangents += jnp.eye(eq.dim_x)[:, x_idx] @ dc
+        tangents = recover_tmp(x_reduced) - x
+        for con in constraints:
+            if hasattr(con, "update_target"):
+                con.update_target(eq)
+    # the perturbed parameters change by exactly deltas, also any that no constraint
+    # fixes (those are set directly below, not by recover)
+    for key, value in deltas.items():
+        if key in eq.optimizable_params:
+            tangents = put(tangents, eq.x_idx[key], value)
 
     # 1st order
     if order > 0:

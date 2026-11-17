@@ -13,7 +13,9 @@ from desc.objectives import (
     ToroidalCurrent,
     get_equilibrium_objective,
     get_fixed_boundary_constraints,
+    maybe_add_self_consistency,
 )
+from desc.optimize import LinearConstraintProjection
 from desc.perturbations import optimal_perturb, perturb
 
 
@@ -277,3 +279,54 @@ def test_perturbation_second_order_scaled_fixed_params():
     # the 2nd order perturbation should remove most of that
     assert f[0] > 10 * f0
     assert f[1] < 0.2 * f[0]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("projection", [False, True])
+def test_perturbation_boundary_axis_coupling(projection):
+    """Test perturbing m=0 boundary modes, whose particular solution moves the axis.
+
+    The axis self-consistency ties R_lmn at rho=0 to Ra_n, so the particular solution of
+    the linear constraints for a change of an m=0 boundary mode moves Ra_n too. perturb
+    must linearize along that change: a tangent from BoundaryRSelfConsistency alone
+    differs from it by an amount linear in the step, a 1st order force error that the
+    2nd order term cannot remove. Both with the default constraints and with a
+    LinearConstraintProjection, as the proximal wrappers use.
+    """
+    eq = desc.examples.get("HELIOTRON")
+    objective = ObjectiveFunction(ForceBalance(eq))
+    objective.build(verbose=0)
+    f0 = objective.compute_scalar(objective.x(eq))
+
+    # move the m=0, n=1 boundary mode by 1 cm
+    dRb = np.zeros_like(eq.Rb_lmn)
+    dRb[eq.surface.R_basis.get_idx(M=0, N=1)] = 0.01
+    deltas = {"Rb_lmn": dRb}
+
+    f = []
+    for order in [1, 2]:
+        eqp = eq.copy()
+        if projection:
+            con = maybe_add_self_consistency(eqp, get_fixed_boundary_constraints(eqp))
+            lcp = LinearConstraintProjection(
+                ObjectiveFunction(ForceBalance(eqp)), ObjectiveFunction(con)
+            )
+            lcp.build(verbose=0)
+            eqp.perturb(
+                deltas,
+                objective=lcp,
+                constraints=None,
+                order=order,
+                include_f=False,
+                verbose=0,
+                copy=False,
+            )
+        else:
+            eqp.perturb(deltas, order=order, include_f=False, verbose=0, copy=False)
+        obj = ObjectiveFunction(ForceBalance(eqp))
+        obj.build(verbose=0)
+        f.append(obj.compute_scalar(obj.x(eqp)))
+    # with the tangent of the pseudo-inverse of BoundaryRSelfConsistency alone, the
+    # cost after the perturbation was ~4e4 f0 at both orders
+    assert f[0] < 1e3 * f0
+    assert f[1] < 0.1 * f[0]

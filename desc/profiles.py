@@ -232,10 +232,12 @@ class _Profile(IOAble, ABC):
 
     def __mul__(self, x):
         """Multiply this profile by another or a constant."""
-        if np.isscalar(x):
+        if jnp.isscalar(x):
+            if isinstance(self, ScaledProfile):
+                self.params = self.params[0] * x
+                return self
             if (
-                isinstance(self, ScaledProfile)
-                or isinstance(self, PowerSeriesProfile)
+                isinstance(self, PowerSeriesProfile)
                 or isinstance(self, SplineProfile)
                 or isinstance(self, HermiteSplineProfile)
                 or isinstance(self, FourierZernikeProfile)
@@ -272,7 +274,7 @@ class _Profile(IOAble, ABC):
 
     def __pow__(self, x):
         """Raise this profile to a power."""
-        if np.isscalar(x):
+        if jnp.isscalar(x):
             if isinstance(self, PowerProfile):
                 self._power *= x
                 return self
@@ -307,7 +309,7 @@ class ScaledProfile(_Profile):
         ), "profile in a ScaledProfile must be a Profile or subclass, got {}.".format(
             str(profile)
         )
-        assert np.isscalar(scale), "scale must be a scalar."
+        assert jnp.isscalar(scale), "scale must be a scalar."
 
         self._profile = profile.copy()
         self._scale = scale
@@ -331,7 +333,7 @@ class ScaledProfile(_Profile):
         elif isinstance(x, (tuple, list)) and len(x) == 2:
             params = x[1]
             scale = x[0]
-        elif np.isscalar(x):
+        elif jnp.isscalar(x):
             scale = x
             params = self._profile.params
         elif len(x) == len(self._profile.params):
@@ -397,7 +399,7 @@ class PowerProfile(_Profile):
         ), "profile in a PowerProfile must be a Profile or subclass, got {}.".format(
             str(profile)
         )
-        assert np.isscalar(power), "power must be a scalar."
+        assert jnp.isscalar(power), "power must be a scalar."
 
         self._profile = profile.copy()
         self._power = power
@@ -434,7 +436,7 @@ class PowerProfile(_Profile):
         elif isinstance(x, (tuple, list)) and len(x) == 2:
             params = x[1]
             power = x[0]
-        elif np.isscalar(x):
+        elif jnp.isscalar(x):
             power = x
             params = self._profile.params
         elif len(x) == len(self._profile.params):

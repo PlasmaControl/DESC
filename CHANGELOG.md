@@ -23,6 +23,8 @@ Performance Improvements
 - Reduces the compilation time of custom `qr_multiply` algorithm.
 - Removes a temporary copy of the full output in chunked computations (e.g. Jacobians with `jac_chunk_size`) when the chunk size does not evenly divide the batched dimension.
 - ``lsq-exact`` (and ``proximal-lsq-exact``) stops when a rejected step is already smaller than ``xtol`` instead of shrinking the trust region until a step of negligible size is accepted. This saves many function evaluations at the end of an optimization when the objective is only evaluated approximately, as with ``ProximalProjection``.
+- ``field_line_integrate`` no longer recompiles its ODE solver on every call: repeated calls with the same inputs reuse the compiled solver.
+- Stores the surface labels ``rho`` and ``zeta`` as floats, so that surfaces labelled with an int or a float share compiled code.
 
 Breaking Changes and Deprecations
 

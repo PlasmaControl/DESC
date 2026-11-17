@@ -1,6 +1,14 @@
 Changelog
 =========
 
+Bug Fixes
+
+- Fixes ``GenericObjective`` returning one value per node of the grid for quantities that depend on only ``theta`` or only ``zeta`` (such as ``A(z)`` and ``perimeter(z)``). As is already done for quantities that depend on only ``rho``, it now returns one value per unique ``theta`` or ``zeta``, so the length of its output, and of any ``target``, ``bounds`` or ``weight`` array given for such a quantity, is now ``grid.num_theta`` or ``grid.num_zeta`` instead of ``grid.num_nodes``.
+
+
+v0.17.4
+-------
+
 New Features
 
 - Adds ``desc.external.agni.AgniStability``, the squared growth rate of the most unstable finite-n ideal MHD mode computed by the external AGNI solver (``pip install agnimhd``), with its gradient for optimization.
@@ -70,13 +78,6 @@ Bug Fixes
 - Fixes wrong signs in ``w_Boozer_mn`` for non-stellarator-symmetric equilibria, which made the Boozer transform (``nu``, ``theta_B``, ``zeta_B``, the Boozer harmonics such as ``|B|_mn_B``, ``QuasisymmetryBoozer``, ``make_boozmn_output`` etc.) incorrect for asymmetric equilibria. Results for stellarator-symmetric equilibria are unchanged. Asymmetric ``make_boozmn_output`` outputs (including ``pmnc_b``) now agree with the hidden symmetries ``booz_xform``, so the warning about the sign of ``numnc`` has been removed.
 - Ensures that ``SurfaceCurrentRegularization.normalization`` has the correct units for every ``regularization`` option.
 - Fixes inaccuracy in derivative when equilibrium boundary sheet current is present and non-negligible in ``BoundaryError`` objective.
-- Fixes ``GenericObjective`` returning one value per node of the grid for
-  quantities that depend on only ``theta`` or only ``zeta`` (such as ``A(z)`` and
-  ``perimeter(z)``). As is already done for quantities that depend on only ``rho``,
-  it now returns one value per unique ``theta`` or ``zeta``, so the length of its
-  output, and of any ``target``, ``bounds`` or ``weight`` array given for such a
-  quantity, is now ``grid.num_theta`` or ``grid.num_zeta`` instead of
-  ``grid.num_nodes``.
 
 
 v0.17.3

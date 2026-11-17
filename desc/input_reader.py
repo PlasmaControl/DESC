@@ -242,6 +242,8 @@ class InputReader:
                 return self.parse_inputs(path)
 
             # extract numbers & words
+            # strip first: comment and equals are indexes into the stripped line
+            line = line.strip()
             match = re.search(r"[!#]", line)
             if match:
                 comment = match.start()
@@ -252,7 +254,7 @@ class InputReader:
                 equals = match.start()
             else:
                 equals = len(line)
-            command = (line.strip() + " ")[0:comment]
+            command = (line + " ")[0:comment]
             argument = (command.strip() + " ")[0:equals]
             data = command[equals + 1 :]
             words = data.split()

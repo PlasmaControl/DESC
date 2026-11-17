@@ -1105,6 +1105,43 @@ def test_BdotgradB(DummyStellarator):
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize("sym", [False, "cos", "sin", "custom"])
+def test_boozer_projection(sym):
+    """Compare Boozer projections and derivatives with dense basis evaluation."""
+    import jax
+
+    from desc.basis import ChebyshevDoubleFourierBasis, DoubleFourierSeries
+    from desc.compute._omnigenity import _project
+
+    basis = (
+        ChebyshevDoubleFourierBasis(L=1, M=3, N=2, NFP=3)
+        if sym == "custom"
+        else DoubleFourierSeries(M=3, N=2, NFP=3, sym=sym)
+    )
+    rng = np.random.default_rng(42)
+    nodes = rng.uniform(size=(31, 3))
+    f = rng.normal(size=31)
+    tangent = (rng.normal(size=nodes.shape), rng.normal(size=f.shape))
+
+    def project(nodes, f):
+        return _project(basis, nodes, f)
+
+    def dense(nodes, f):
+        return basis.evaluate(nodes).T @ f
+
+    for actual, expected in zip(
+        jax.jvp(project, (nodes, f), tangent), jax.jvp(dense, (nodes, f), tangent)
+    ):
+        np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
+    cotangent = rng.normal(size=basis.num_modes)
+    for actual, expected in zip(
+        jax.vjp(project, nodes, f)[1](cotangent),
+        jax.vjp(dense, nodes, f)[1](cotangent),
+    ):
+        np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
+
+
+@pytest.mark.unit
 @pytest.mark.solve
 def test_boozer_transform():
     """Test that Boozer coordinate transform agrees with BOOZ_XFORM."""

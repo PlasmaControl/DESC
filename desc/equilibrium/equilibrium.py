@@ -5,6 +5,7 @@ import numbers
 import os
 import warnings
 from collections.abc import MutableSequence
+from typing import overload
 
 import numpy as np
 from scipy import special
@@ -39,7 +40,7 @@ from desc.objectives import (
 from desc.optimizable import Optimizable, optimizable_parameter
 from desc.optimize import LinearConstraintProjection, Optimizer
 from desc.perturbations import perturb
-from desc.profiles import HermiteSplineProfile, SplineProfile
+from desc.profiles import HermiteSplineProfile, SplineProfile, _Profile
 from desc.transform import Transform
 from desc.utils import (
     ResolutionWarning,
@@ -667,8 +668,25 @@ class Equilibrium(IOAble, Optimizable):
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
         self._L_lmn = copy_coeffs(self.L_lmn, old_modes_L, self.L_basis.modes)
 
+    @overload
+    def get_surface_at(
+        self, rho: float, theta: None = None, zeta: None = None
+    ) -> FourierRZToroidalSurface: ...
+
+    @overload
+    def get_surface_at(
+        self, rho: None = None, theta: None = None, *, zeta: float
+    ) -> ZernikeRZToroidalSection: ...
+
+    @overload
+    def get_surface_at(
+        self, rho: None, theta: None, zeta: float
+    ) -> ZernikeRZToroidalSection: ...
+
     @execute_on_cpu
-    def get_surface_at(self, rho=None, theta=None, zeta=None):
+    def get_surface_at(
+        self, rho: float | None = None, theta: None = None, zeta: float | None = None
+    ) -> FourierRZToroidalSurface | ZernikeRZToroidalSection:
         """Return a representation for a given coordinate surface.
 
         Parameters
@@ -774,8 +792,8 @@ class Equilibrium(IOAble, Optimizable):
             surface.Z_lmn = Zb
             return surface
 
-    def get_profile(self, name, grid=None, kind="spline", **kwargs):
-        """Return a SplineProfile of the desired quantity.
+    def get_profile(self, name, grid=None, kind="spline", **kwargs) -> _Profile:
+        """Return a profile of the desired quantity.
 
         Parameters
         ----------
@@ -791,7 +809,7 @@ class Equilibrium(IOAble, Optimizable):
 
         Returns
         -------
-        profile : SplineProfile
+        profile : Profile
             Radial profile of the desired quantity.
 
         """
@@ -1304,7 +1322,9 @@ class Equilibrium(IOAble, Optimizable):
             Maximum number of Newton iterations.
         full_output : bool, optional
             If True, also return a tuple where the first element is the residual from
-            the root finding and the second is the number of iterations.
+            the root finding and the second is the number of iterations. The
+            residual identifies failed inversions, which are returned as computed
+            (see Returns).
         kwargs : dict, optional
             Additional keyword arguments to pass to ``root`` such as ``maxiter_ls``,
             ``alpha``.
@@ -1313,9 +1333,11 @@ class Equilibrium(IOAble, Optimizable):
         -------
         out : jnp.ndarray
             Shape (k, 3).
-            Coordinates mapped from ``inbasis`` to ``outbasis``. Values of NaN will be
-            returned for coordinates where root finding did not succeed, possibly
-            because the coordinate is not in the plasma volume.
+            Coordinates mapped from ``inbasis`` to ``outbasis``. If the inversion fails
+            to converge, the output is still evaluated at the final solver iterate;
+            failed results are not automatically replaced with NaN. Use
+            ``full_output=True`` to obtain the residual for each point and reject
+            results with a non-finite residual or a residual greater than ``tol``.
         info : tuple
             2 element tuple containing residuals and number of iterations
             for each point. Only returned if ``full_output`` is True.
@@ -1536,7 +1558,7 @@ class Equilibrium(IOAble, Optimizable):
         )
 
     @property
-    def surface(self):
+    def surface(self) -> FourierRZToroidalSurface:
         """Surface: Geometric surface defining boundary conditions."""
         return self._surface
 
@@ -1553,7 +1575,7 @@ class Equilibrium(IOAble, Optimizable):
         self._surface = new
 
     @property
-    def axis(self):
+    def axis(self) -> FourierRZCurve:
         """Curve: object representing the magnetic axis."""
         return self._axis
 
@@ -1749,7 +1771,7 @@ class Equilibrium(IOAble, Optimizable):
         self.axis.Z_n = Za_n
 
     @property
-    def pressure(self):
+    def pressure(self) -> _Profile:
         """Profile: Pressure (Pa) profile."""
         return self._pressure
 
@@ -1788,7 +1810,7 @@ class Equilibrium(IOAble, Optimizable):
         self.pressure.params = p_l
 
     @property
-    def anisotropy(self):
+    def anisotropy(self) -> _Profile:
         """Profile: Anisotropy profile."""
         return self._anisotropy
 
@@ -1812,7 +1834,7 @@ class Equilibrium(IOAble, Optimizable):
         self.anisotropy.params = a_lmn
 
     @property
-    def electron_temperature(self):
+    def electron_temperature(self) -> _Profile:
         """Profile: Electron temperature (eV) profile."""
         return self._electron_temperature
 
@@ -1853,7 +1875,7 @@ class Equilibrium(IOAble, Optimizable):
         self.electron_temperature.params = Te_l
 
     @property
-    def electron_density(self):
+    def electron_density(self) -> _Profile:
         """Profile: Electron density (m^-3) profile."""
         return self._electron_density
 
@@ -1894,7 +1916,7 @@ class Equilibrium(IOAble, Optimizable):
         self.electron_density.params = ne_l
 
     @property
-    def ion_temperature(self):
+    def ion_temperature(self) -> _Profile:
         """Profile: ion temperature (eV) profile."""
         return self._ion_temperature
 
@@ -2006,7 +2028,7 @@ class Equilibrium(IOAble, Optimizable):
         self.atomic_number.params = Zeff_l
 
     @property
-    def iota(self):
+    def iota(self) -> _Profile:
         """Profile: Rotational transform (iota) profile."""
         return self._iota
 
@@ -2044,7 +2066,7 @@ class Equilibrium(IOAble, Optimizable):
         self.iota.params = i_l
 
     @property
-    def current(self):
+    def current(self) -> _Profile:
         """Profile: Toroidal current profile (I)."""
         return self._current
 
@@ -2882,7 +2904,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
         )
 
     @property
-    def equilibria(self):
+    def equilibria(self) -> list[Equilibrium]:
         """list: Equilibria contained in the family."""
         return self._equilibria
 
@@ -2900,7 +2922,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             )
         self._equilibria = list(equil)
 
-    def __getitem__(self, i):
+    def __getitem__(self, i) -> Equilibrium:
         return self._equilibria[i]
 
     def __setitem__(self, i, new_item):

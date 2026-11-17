@@ -1289,7 +1289,6 @@ class TestMagneticFields:
             NFP=40,
             check_intersection=False,
         )
-        # start inside the coils, the field outside them is negligible
         r0 = [4.5]
         z0 = [0.0]
         phis = [0, np.pi]

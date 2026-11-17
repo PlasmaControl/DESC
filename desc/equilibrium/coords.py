@@ -861,3 +861,160 @@ def get_rtz_grid(
         **idx,
     )
     return desc_grid
+
+
+def winding(curve, points, chunk_size=50):
+    """Compute the winding number of points and closed curves.
+
+    Parameters
+    ----------
+    curve : array-like, shape(n_curves,M,2)
+        X,Y coordinates of closed curves to be evaluated.
+    points : array-like, shape(n_curves,N,2)
+        X,Y coordinates of points to be evaluated.
+
+    Returns
+    -------
+    winding : array-like, shape(n_curves,N)
+        Winding numbers
+    """
+    errorif(curve.shape[0] != points.shape[0])
+    if not jnp.allclose(curve[:, 0], curve[:, -1]):
+        curve = jnp.concatenate([curve, curve[:, 0:1]], axis=1)
+
+    # Transpose curve and points to allow for batching
+    curve = curve[:, None, :, :]  # (n_curves, 1, M+1, 2)
+    points = points[:, :, None, :]  # (n_curves, N, 1, 2)
+    curve = curve.transpose(1, 0, 2, 3)  # (1, n_curves, M+1, 2)
+    points = points.transpose(1, 0, 2, 3)  # (N, n_curves, M+1, 2)
+
+    c1 = curve[:, :, :-1, :]  # First M points on the curve
+    c2 = curve[:, :, 1:, :]  # Last M points on the curve
+
+    def wind(points):
+        # Describe X,Y distances as points in complex plane
+        z = points - c1
+        z_next = points - c2
+        z = z[..., 0] + 1j * z[..., 1]
+        z_next = z_next[..., 0] + 1j * z_next[..., 1]
+
+        # Calculate angle between adjacent line segments
+        angles = jnp.angle(z_next / z)
+
+        # Winding number is defined as sum over all angles
+        winding = jnp.sum(angles, axis=2)
+
+        return winding
+
+    w = batch_map(wind, points, batch_size=chunk_size)
+
+    # Transpose w back
+    w = w.transpose(1, 0)
+
+    return w
+
+
+def in_plasma(points, eq, M=24):
+    """Determine if an array of points is inside the plasma.
+
+    Will probably return False if the point is directly on the boundary,
+    but will be most sensitive to resolution at and near the boundary.
+
+    Parameters
+    ----------
+    points : array-like shape(n_r,n_phi,n_z,3)
+        R,phi,Z coordinates of points to be evaluated. points[:,idx,:,1] should
+        be constant.
+    eq : Equilibrium
+        Equilibrium with the desired plasma boundary.
+    M : int
+        Poloidal resolution of equilibrium grid to evaluate winding number.
+
+    Returns
+    -------
+    out : array-like shape(n_r,n_phi,n_z)
+        Boolean array indicating whether each point is inside the plasma boundary.
+    """
+    phi = points[0, :, 0, 1].copy()
+
+    # Order phi in the same way that the grid will be ordered
+    period = 2 * jnp.pi / eq.NFP
+    phi = jnp.where(phi == period, phi, phi % period)
+    phi, idx, inv = jnp.unique(phi, sorted=True, return_index=True, return_inverse=True)
+    phi = phi[idx]
+
+    # Create a grid with the sorted phi
+    grid = LinearGrid(rho=[1.0], M=M, zeta=phi, NFP=eq.NFP)
+
+    # Compute R and Z on the grid with the sorted phi
+    data = eq.compute(["R", "Z"], grid=grid)
+
+    # grid nodes are ordered as zeta, rho, theta
+    R_plasma = data["R"].reshape(grid.num_zeta, -1)
+    Z_plasma = data["Z"].reshape(grid.num_zeta, -1)
+    curve = jnp.stack([R_plasma, Z_plasma], axis=-1)
+
+    # Reindex the boundary back into the original phi ordering
+    curve = curve[inv, :, :]
+
+    # Take only the R and Z, transpose into (phi,R,Z), and then reshape as (phi,RZ)
+    pts = points[..., [0, 2]].transpose(1, 0, 2, 3).reshape(points.shape[1], -1, 2)
+
+    out = jnp.isclose(jnp.abs(winding(curve, pts)), 2 * jnp.pi)
+    out = out.reshape(points.shape[1], points.shape[0], points.shape[2]).transpose(
+        1, 0, 2
+    )
+    return out
+
+
+def plasma_dist(points, eq, M=24):
+    """
+    Determine distance of points from the plasma.
+
+    Parameters
+    ----------
+    points : array-like shape(n_r,n_phi,n_z,3)
+        R,phi,Z coordinates of points to be evaluated. points[:,idx,:,1] should
+        be constant.
+    eq : Equilibrium
+        Equilibrium with the desired plasma boundary.
+    M : int
+        Poloidal resolution of equilibrium grid on which the distance is evaluated.
+
+    Returns
+    -------
+    out : array-like shape(n_r,n_phi,n_z)
+        Minimum distance of each point in points from the plasma. Assumes ~
+        axisymmetry, i.e. assumes nearest point is in the same phi plane for
+        improved computational performance.
+    """
+    phi = points[0, :, 0, 1].copy()
+
+    # Order phi in the same way that the grid will be ordered
+    period = 2 * jnp.pi / eq.NFP
+    phi = jnp.where(phi == period, phi, phi % period)
+    phi, idx, inv = jnp.unique(phi, sorted=True, return_index=True, return_inverse=True)
+    phi = phi[idx]
+
+    # Create a grid with the sorted phi
+    grid = LinearGrid(rho=[1.0], M=M, zeta=phi, NFP=eq.NFP)
+
+    # Compute R and Z on the grid with the sorted phi
+    data = eq.compute(["R", "Z"], grid=grid)
+
+    # grid nodes are ordered as zeta, rho, theta
+    R_plasma = data["R"].reshape(grid.num_zeta, -1)
+    Z_plasma = data["Z"].reshape(grid.num_zeta, -1)
+    curve = jnp.stack([R_plasma, Z_plasma], axis=-1)
+
+    # Reindex the boundary back into the original phi ordering
+    curve = curve[inv, :, :]
+
+    # Take only the R and Z, transpose into (phi,R,Z), and then reshape as (phi,RZ)
+    pts = points[..., [0, 2]].transpose(1, 0, 2, 3).reshape(points.shape[1], -1, 2)
+
+    out = safenorm(pts[:, :, None, :] - curve[:, None, :, :], axis=-1).min(axis=-1)
+    out = out.reshape(points.shape[1], points.shape[0], points.shape[2]).transpose(
+        1, 0, 2
+    )
+    return out

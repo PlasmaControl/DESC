@@ -22,6 +22,7 @@ __all__ = [
     "DoubleChebyshevFourierBasis",
     "FourierZernikeBasis",
     "ChebyshevPolynomial",
+    "ChebyshevDoubleFourierBasis",
 ]
 
 

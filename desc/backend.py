@@ -44,8 +44,10 @@ else:
 
             jax_config.update("jax_enable_x64", True)
             if desc_config.get("kind") == "gpu" and jax.default_backend() != "gpu":
-                set_device("cpu")
-                warnings.simplefilter("default")  # show this one, unlike the ones above
+                # tested in a subprocess, where coverage does not see these lines
+                set_device("cpu")  # pragma: no cover
+                # show this warning, unlike the ones above
+                warnings.simplefilter("default")  # pragma: no cover
                 warnings.warn(
                     "JAX failed to detect GPU, are you sure you "
                     + "installed JAX with GPU support?"

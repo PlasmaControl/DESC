@@ -3727,8 +3727,9 @@ class FixNearAxisLambda(_FixedObjective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    order : int
-        order (in rho) of near-axis lambda behavior to constrain
+    order : {0,1}
+        order (in rho) of near-axis lambda behavior to constrain. Orders above 1
+        are not implemented for lambda.
     N : int
         max toroidal resolution to constrain.
         If `None`, defaults to equilibrium's toroidal resolution
@@ -3775,6 +3776,12 @@ class FixNearAxisLambda(_FixedObjective):
         normalize_target=True,
         name="Fix Near Axis Lambda Behavior",
     ):
+        errorif(
+            order > 1,
+            NotImplementedError,
+            "FixNearAxisLambda is only implemented up to O(rho), "
+            f"got order={order}.",
+        )
         self._nae_eq = target
         self._order = order
         self._N = N

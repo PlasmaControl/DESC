@@ -710,6 +710,10 @@ class DeflationOperator(_Objective):
     (if `deflation_type="exp"`)
 
     where x is the state and xₖ the passed-in known state.
+    If ``norm_weighting="ess"``, the norm is instead the weighted norm
+    ||w⊙(x−xₖ)||₂, where the weights w decay exponentially with the mode number of
+    each parameter so that lower order modes count more towards the distance between
+    states than higher order modes.
     If multiple known states are used for deflation, then M is computed
     for each deflated state, then either multipled or added together (depending
     on if `multiple_deflation_type="prod"` or `"sum"`) to form the final cost.
@@ -763,6 +767,28 @@ class DeflationOperator(_Objective):
         Whether to use a single shift or include the shift in each individual
         deflation term. i.e. whether to use M = σ + prod(||𝐱−𝐱_i*||⁻ᵖ₂) (if True)
         or to use M = prod( σ + ||𝐱−𝐱_i*||⁻ᵖ₂). Defaults to False.
+    norm_weighting: {None, "ess"}, optional
+        Weighting applied to the parameter differences 𝐱−𝐱ᵢ* before taking the norm.
+        If None (default), the unweighted 2-norm is used. If ``"ess"``, each
+        difference is multiplied by the exponential spectral scaling (ESS)
+        weight of its mode, w = max(exp(-α(k-1)), w_min), where k is the norm of
+        the mode numbers (e.g. max(|l|,|m|,|n|)). This is the same scaling used by
+        ``x_scale="ess"`` in ``Optimizer.optimize``, and it makes the deflation
+        operator treat states differing mainly in their low order modes as farther
+        apart than states differing mainly in their high order modes. Modes with
+        k=1 get weight 1, the k=0 mode gets weight exp(α), and parameters that are
+        not spectral coefficients (e.g. profile coefficients or scalars) get weight 1.
+        The weights are computed from the modes of ``thing``.
+    ess_alpha: float, optional
+        Decay rate α of the ESS weights, ignored unless ``norm_weighting="ess"``.
+        Larger values weight high order modes less. Defaults to 1.2.
+    ess_order: {1, 2, np.inf}, optional
+        Norm used to compute the mode level k from the multi-index mode numbers,
+        ignored unless ``norm_weighting="ess"``. ``1`` uses |l|+|m|+|n|, ``2`` uses
+        sqrt(l²+m²+n²) and ``np.inf`` uses max(|l|,|m|,|n|). Defaults to ``np.inf``.
+    ess_min_value: float, optional
+        Minimum ESS weight w_min, ignored unless ``norm_weighting="ess"``.
+        Defaults to 1e-7.
 
     """
 
@@ -774,6 +800,7 @@ class DeflationOperator(_Objective):
         "_multiple_deflation_type",
         "_single_shift",
         "_params_to_deflate_with",
+        "_norm_weighting",
     ]
 
     _coordinates = "rtz"
@@ -800,6 +827,10 @@ class DeflationOperator(_Objective):
         deflation_type="power",
         multiple_deflation_type="prod",
         single_shift=False,
+        norm_weighting=None,
+        ess_alpha=1.2,
+        ess_order=np.inf,
+        ess_min_value=1e-7,
     ):
         if target is None and bounds is None:
             target = 0
@@ -832,6 +863,15 @@ class DeflationOperator(_Objective):
         )
         self._multiple_deflation_type = multiple_deflation_type
         self._single_shift = single_shift
+        errorif(
+            norm_weighting not in [None, "ess"],
+            ValueError,
+            f"norm_weighting must be None or 'ess', got {norm_weighting}",
+        )
+        self._norm_weighting = norm_weighting
+        self._ess_alpha = ess_alpha
+        self._ess_order = ess_order
+        self._ess_min_value = ess_min_value
         self._objective = objective
         if self._objective is not None:
             errorif(
@@ -900,6 +940,22 @@ class DeflationOperator(_Objective):
             AssertionError,
             "",
         )
+
+        if self._norm_weighting == "ess":
+            scales = thing._get_ess_scale(
+                self._ess_alpha, self._ess_order, self._ess_min_value
+            )
+            # pack/unpack so the scales have exactly the structure of params_dict
+            scales = thing.unpack_params(thing.pack_params(scales))
+            # flatten in the same order as the deflated parameters in compute
+            self._norm_weights = np.concatenate(
+                [
+                    np.atleast_1d(np.asarray(scale))[idx]
+                    for scale, idx in zip(tree_leaves(scales), self._indices)
+                ]
+            )
+        else:
+            self._norm_weights = None
 
         if self._objective is not None:
             if not self._objective.built:
@@ -981,6 +1037,8 @@ class DeflationOperator(_Objective):
         # to avoid division by zero if the states are the exact same
         eps = 1e2 * jnp.finfo(diffs[0].dtype).eps
         diffs = jnp.vstack(diffs)
+        if self._norm_weights is not None:
+            diffs = diffs * self._norm_weights
         if self._deflation_type == "power":
             M_i = 1 / (
                 jnp.linalg.norm(diffs, axis=1) + eps

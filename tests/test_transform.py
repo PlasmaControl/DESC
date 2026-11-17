@@ -1,5 +1,7 @@
 """Tests for transforming from spectral coefficients to real space values."""
 
+from contextlib import nullcontext
+
 import numpy as np
 import pytest
 
@@ -615,7 +617,8 @@ class TestTransform:
         """Test fitting with pest method (7 zeta planes > 5 toroidal modes)."""
         basis = FourierZernikeBasis(3, 3, 2, spectral_indexing="ansi")
         grid = ConcentricGrid(4, 4, 3, node_pattern="jacobi")
-        transform = Transform(grid, basis, method="pest", build_pinv=True)
+        with pytest.warns(UserWarning, match="full pseudoinverse"):
+            transform = Transform(grid, basis, method="pest", build_pinv=True)
         assert transform.method == "pest"
         np.random.seed(1)
         c = (0.5 - np.random.random(basis.num_modes)) * abs(basis.modes).sum(axis=-1)
@@ -693,7 +696,12 @@ class TestTransform:
                 np.testing.assert_allclose(
                     y1, y2, atol=1e-10, err_msg=f"N={N} sym={sym}"
                 )
-                t3 = Transform(grid, basis, method="pest", build_pinv=True)
+                with (
+                    pytest.warns(UserWarning, match="full pseudoinverse")
+                    if N > 2 * basis.N + 1
+                    else nullcontext()
+                ):
+                    t3 = Transform(grid, basis, method="pest", build_pinv=True)
                 x3 = t3.transform(c)
                 np.testing.assert_allclose(
                     x1, x3, atol=1e-10, err_msg=f"pest N={N} sym={sym}"
@@ -917,7 +925,8 @@ class TestPestTransform:
         """More zeta planes than toroidal modes."""
         basis = self._basis()
         grid = self._grid(9)  # 9 planes > 5 toroidal modes
-        transform = Transform(grid, basis, method="pest", build_pinv=True)
+        with pytest.warns(UserWarning, match="full pseudoinverse"):
+            transform = Transform(grid, basis, method="pest", build_pinv=True)
         assert transform.method == "pest"
         f = self._f(grid.nodes)
         np.testing.assert_allclose(transform.fit(f), self._coeffs(basis), atol=1e-12)
@@ -948,7 +957,10 @@ class TestPestTransform:
         """Different node counts per plane: fit, transform and project all work."""
         basis = self._basis()
         grid = self._grid(5, ragged=True)
-        transform = Transform(grid, basis, method="pest", build=True, build_pinv=True)
+        with pytest.warns(UserWarning, match="full pseudoinverse"):
+            transform = Transform(
+                grid, basis, method="pest", build=True, build_pinv=True
+            )
         assert transform.method == "pest"
         f = self._f(grid.nodes)
         np.testing.assert_allclose(transform.fit(f), self._coeffs(basis), atol=1e-12)
@@ -1011,7 +1023,7 @@ class TestPestTransform:
         y = np.random.default_rng(4).standard_normal(n)
         V = jnp.asarray(basis.evaluate(ref))
 
-        def build(nodes):
+        def build(nodes, build_pinv=False):
             grid = Grid(nodes, NFP=self.NFP, sort=False, jitable=True, **idx)
             return Transform(
                 grid,
@@ -1019,12 +1031,12 @@ class TestPestTransform:
                 derivs=np.array([[0, 1, 0]]),
                 method="pest",
                 build=True,
-                build_pinv=True,
+                build_pinv=build_pinv,
             )
 
         @jit
         def inside(nodes):
-            transform = build(nodes)
+            transform = build(nodes, build_pinv=True)
             assert transform.method == "pest"
             assert transform.pest_plane_idx is None  # traced: no per-plane grouping
             return (
@@ -1033,14 +1045,15 @@ class TestPestTransform:
                 transform.project(y),
             )
 
-        for dt_f, c_fit, proj in (
-            inside(ref.nodes),  # built under jit
-            (  # built outside, applied under jit
-                jit(lambda c: build(ref.nodes).transform(c, 0, 1, 0))(c),
-                jit(build(ref.nodes).fit)(f),
-                jit(build(ref.nodes).project)(y),
-            ),
-        ):
+        # built under jit, the zeta indices are traced: no per-plane fit
+        with pytest.warns(UserWarning, match="full pseudoinverse"):
+            built_inside = inside(ref.nodes)
+        built_outside = (  # built outside, applied under jit
+            jit(lambda c: build(ref.nodes).transform(c, 0, 1, 0))(c),
+            jit(build(ref.nodes, build_pinv=True).fit)(f),
+            jit(build(ref.nodes).project)(y),
+        )
+        for dt_f, c_fit, proj in (built_inside, built_outside):
             np.testing.assert_allclose(dt_f, self._f(ref.nodes, (0, 1, 0)), atol=1e-11)
             np.testing.assert_allclose(c_fit, c, atol=1e-12)
             np.testing.assert_allclose(proj, V.T @ y, atol=1e-11)

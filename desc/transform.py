@@ -507,6 +507,19 @@ class Transform(IOAble):
             )
         elif self.method == "pest" and not self._pest_separable_fit():
             # Use full pinv
+            warnings.warn(
+                colored(
+                    "pest method: the per-plane fit is not exact for this grid ("
+                    + (
+                        "unequal or traced number of nodes per zeta plane"
+                        if self.pest_plane_idx is None
+                        else f"{self.grid.num_zeta} zeta planes > "
+                        f"{self.num_n_modes} toroidal modes"
+                    )
+                    + "), falling back to the full pseudoinverse of direct1 for fit",
+                    "yellow",
+                )
+            )
             A = self.basis.evaluate(self.grid, np.array([0, 0, 0]))
             self.matrices["pinv"] = (
                 jnp.linalg.pinv(A, rtol=rcond) if A.size else np.zeros_like(A.T)

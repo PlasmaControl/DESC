@@ -473,8 +473,11 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq, N=None):
 
     Parameters
     ----------
-    qsc :  Qsc
-        Qsc object to use as the NAE constraints on the DESC equilibrium
+    qsc : Qsc or None
+        Qsc object to use as the NAE constraints on the DESC equilibrium.
+        If None, the returned coefficients are zero-valued placeholders and
+        the constraints will instead use the DESC equilibrium's current
+        near-axis behavior.
     desc_eq : Equilibrium
         DESC equilibrium to constrain
     N : int
@@ -500,7 +503,7 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq, N=None):
     if N is None:
         N = desc_eq.N
     else:
-        N = np.max([desc_eq.N, N])
+        N = np.min([desc_eq.N, N])
     assert N == int(N), "Toroidal Resolution must be an integer!"
     N = int(N)
     if qsc is None:
@@ -733,8 +736,10 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):  # noqa: C901
 
     Parameters
     ----------
-    qsc : Qsc
-        pyQsc Qsc object to use as the NAE constraints on the DESC eq
+    qsc : Qsc or None
+        pyQsc Qsc object to use as the NAE constraints on the DESC eq.
+        If None, the constraints target the DESC equilibrium's current
+        near-axis behavior, and ``coeffs`` is unused.
     desc_eq : Equilibrium
         DESC equilibrium to constrain
     coeffs : dict
@@ -784,6 +789,7 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):  # noqa: C901
 
     # R_20n i.e. L=2, M=0
     for n, NAEcoeff in zip(Rbasis_cos.modes[:, 2], coeffs["R_2_0_n"]):
+        target = None if qsc is None else NAEcoeff * r
         modes = np.column_stack(
             [
                 l_modes_2_0,
@@ -793,11 +799,12 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):  # noqa: C901
         )
         Rconstraints += (
             FixSumModesR(
-                eq=desc_eq, target=NAEcoeff * r, sum_weights=weights_2_0, modes=modes
+                eq=desc_eq, target=target, sum_weights=weights_2_0, modes=modes
             ),
         )
     # R_2_2n
     for n, NAEcoeff in zip(Rbasis_cos.modes[:, 2], coeffs["R_2_2_n"]):
+        target = None if qsc is None else NAEcoeff * r
         modes = np.column_stack(
             [
                 l_modes_2_2,
@@ -807,11 +814,12 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):  # noqa: C901
         )
         Rconstraints += (
             FixSumModesR(
-                eq=desc_eq, target=NAEcoeff * r, sum_weights=weights_2_2, modes=modes
+                eq=desc_eq, target=target, sum_weights=weights_2_2, modes=modes
             ),
         )
     # R_2_neg2n
     for n, NAEcoeff in zip(Rbasis_sin.modes[:, 2], coeffs["R_2_neg2_n"]):
+        target = None if qsc is None else NAEcoeff * r
         modes = np.column_stack(
             [
                 l_modes_2_2,
@@ -821,11 +829,12 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):  # noqa: C901
         )
         Rconstraints += (
             FixSumModesR(
-                eq=desc_eq, target=NAEcoeff * r, sum_weights=weights_2_2, modes=modes
+                eq=desc_eq, target=target, sum_weights=weights_2_2, modes=modes
             ),
         )
     # Z_2_0n
     for n, NAEcoeff in zip(Zbasis_sin.modes[:, 2], coeffs["Z_2_0_n"]):
+        target = None if qsc is None else NAEcoeff * r
         modes = np.column_stack(
             [
                 l_modes_2_0,
@@ -835,11 +844,12 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):  # noqa: C901
         )
         Zconstraints += (
             FixSumModesZ(
-                eq=desc_eq, target=NAEcoeff * r, sum_weights=weights_2_0, modes=modes
+                eq=desc_eq, target=target, sum_weights=weights_2_0, modes=modes
             ),
         )
     # Z_2_neg2n
     for n, NAEcoeff in zip(Zbasis_cos.modes[:, 2], coeffs["Z_2_neg2_n"]):
+        target = None if qsc is None else NAEcoeff * r
         modes = np.column_stack(
             [
                 l_modes_2_2,
@@ -849,11 +859,12 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):  # noqa: C901
         )
         Zconstraints += (
             FixSumModesZ(
-                eq=desc_eq, target=NAEcoeff * r, sum_weights=weights_2_2, modes=modes
+                eq=desc_eq, target=target, sum_weights=weights_2_2, modes=modes
             ),
         )
     # Z_2_2n
     for n, NAEcoeff in zip(Zbasis_sin.modes[:, 2], coeffs["Z_2_2_n"]):
+        target = None if qsc is None else NAEcoeff * r
         modes = np.column_stack(
             [
                 l_modes_2_2,
@@ -863,7 +874,7 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):  # noqa: C901
         )
         Zconstraints += (
             FixSumModesZ(
-                eq=desc_eq, target=NAEcoeff * r, sum_weights=weights_2_2, modes=modes
+                eq=desc_eq, target=target, sum_weights=weights_2_2, modes=modes
             ),
         )
 
@@ -875,8 +886,11 @@ def make_RZ_cons_2nd_order(qsc, desc_eq, N=None):
 
     Parameters
     ----------
-        qsc (Qsc): pyQsc Qsc object to use as the NAE constraints on the DESC eq
+        qsc (Qsc or None): pyQsc Qsc object to use as the NAE constraints on the
+         DESC eq. If None, the DESC eq's current near-axis behavior is fixed.
         desc_eq (Equilibrium): desc equilibrium to constrain
+        N (int): max toroidal resolution to constrain.
+         If None, defaults to equilibrium's toroidal resolution
 
     Returns
     -------

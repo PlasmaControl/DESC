@@ -57,6 +57,7 @@ from desc.objectives import (
     get_NAE_constraints,
     maybe_add_self_consistency,
 )
+from desc.objectives.nae_utils import make_RZ_cons_1st_order, make_RZ_cons_2nd_order
 from desc.objectives.utils import factorize_linear_constraints
 from desc.optimize import LinearConstraintProjection
 from desc.profiles import PowerSeriesProfile
@@ -877,6 +878,48 @@ def test_FixNAE_util_correct_objectives():
     assert _is_any_instance(cs, FixIonTemperature)
     assert _is_any_instance(cs, FixAtomicNumber)
     assert _is_any_instance(cs, FixIota)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("sym", [True, False])
+def test_FixNearAxis_no_qsc_targets_current_eq(sym):
+    """Test NAE constraints built with qsc=None are satisfied by the eq itself."""
+    # L > M and generic (random) coefficients so that every O(rho^l) term,
+    # including the O(rho^2) ones, is nonzero
+    eq = Equilibrium(L=8, M=6, N=3, NFP=2, sym=sym)
+    rng = np.random.default_rng(0)
+    eq.R_lmn = rng.normal(scale=0.1, size=eq.R_lmn.size)
+    eq.Z_lmn = rng.normal(scale=0.1, size=eq.Z_lmn.size)
+    eq.L_lmn = rng.normal(scale=0.1, size=eq.L_lmn.size)
+    eq.axis = eq.get_axis()
+
+    for order in [0, 1, 2]:
+        cons = (
+            FixNearAxisR(eq, order=order),
+            FixNearAxisZ(eq, order=order),
+            FixNearAxisLambda(eq, order=min(order, 1)),
+        )
+        for con in cons:
+            con.build(verbose=0)
+            np.testing.assert_allclose(
+                con.compute(eq.params_dict),
+                con.target,
+                atol=1e-14,
+                err_msg=f"{con.name} order={order}",
+            )
+
+    # N is the max toroidal resolution constrained, clipped to eq.N
+    for N, N_expected in [(1, 1), (eq.N + 3, eq.N)]:
+        for make_cons in [make_RZ_cons_1st_order, make_RZ_cons_2nd_order]:
+            cons = make_cons(None, eq, N=N)
+            ns = np.concatenate([np.atleast_2d(c._modes)[:, 2] for c in cons])
+            assert np.max(np.abs(ns)) == N_expected, make_cons.__name__
+
+    # lambda NAE constraints are only implemented up to O(rho)
+    with pytest.raises(NotImplementedError):
+        FixNearAxisLambda(eq, order=2)
+    with pytest.raises(NotImplementedError):
+        get_NAE_constraints(eq, None, order=2, fix_lambda=2)
 
 
 @pytest.mark.unit

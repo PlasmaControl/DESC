@@ -1,7 +1,5 @@
 """Tests for transforming from spectral coefficients to real space values."""
 
-from contextlib import nullcontext
-
 import numpy as np
 import pytest
 
@@ -613,12 +611,12 @@ class TestTransform:
         np.testing.assert_allclose(c, c1, atol=1e-12)
 
     @pytest.mark.unit
+    @pytest.mark.filterwarnings("ignore:pest method")  # see test_pest_fit_warns
     def test_fit_pest(self):
         """Test fitting with pest method (7 zeta planes > 5 toroidal modes)."""
         basis = FourierZernikeBasis(3, 3, 2, spectral_indexing="ansi")
         grid = ConcentricGrid(4, 4, 3, node_pattern="jacobi")
-        with pytest.warns(UserWarning, match="full pseudoinverse"):
-            transform = Transform(grid, basis, method="pest", build_pinv=True)
+        transform = Transform(grid, basis, method="pest", build_pinv=True)
         assert transform.method == "pest"
         np.random.seed(1)
         c = (0.5 - np.random.random(basis.num_modes)) * abs(basis.modes).sum(axis=-1)
@@ -672,6 +670,7 @@ class TestTransform:
         _ = tr["Z"].project(f)
 
     @pytest.mark.unit
+    @pytest.mark.filterwarnings("ignore:pest method")  # see test_pest_fit_warns
     def test_fft_even_grid(self):
         """Test fft method with even number of grid points."""
         for sym in ["cos", "sin", False]:
@@ -696,12 +695,7 @@ class TestTransform:
                 np.testing.assert_allclose(
                     y1, y2, atol=1e-10, err_msg=f"N={N} sym={sym}"
                 )
-                with (
-                    pytest.warns(UserWarning, match="full pseudoinverse")
-                    if N > 2 * basis.N + 1
-                    else nullcontext()
-                ):
-                    t3 = Transform(grid, basis, method="pest", build_pinv=True)
+                t3 = Transform(grid, basis, method="pest", build_pinv=True)
                 x3 = t3.transform(c)
                 np.testing.assert_allclose(
                     x1, x3, atol=1e-10, err_msg=f"pest N={N} sym={sym}"
@@ -921,12 +915,12 @@ class TestPestTransform:
             )
 
     @pytest.mark.unit
+    @pytest.mark.filterwarnings("ignore:pest method")  # see test_pest_fit_warns
     def test_pest_fit_oversampled_zeta(self):
         """More zeta planes than toroidal modes."""
         basis = self._basis()
         grid = self._grid(9)  # 9 planes > 5 toroidal modes
-        with pytest.warns(UserWarning, match="full pseudoinverse"):
-            transform = Transform(grid, basis, method="pest", build_pinv=True)
+        transform = Transform(grid, basis, method="pest", build_pinv=True)
         assert transform.method == "pest"
         f = self._f(grid.nodes)
         np.testing.assert_allclose(transform.fit(f), self._coeffs(basis), atol=1e-12)
@@ -953,14 +947,12 @@ class TestPestTransform:
         np.testing.assert_allclose(V.T @ lam, c, atol=1e-11)
 
     @pytest.mark.unit
+    @pytest.mark.filterwarnings("ignore:pest method")  # see test_pest_fit_warns
     def test_pest_ragged_planes(self):
         """Different node counts per plane: fit, transform and project all work."""
         basis = self._basis()
         grid = self._grid(5, ragged=True)
-        with pytest.warns(UserWarning, match="full pseudoinverse"):
-            transform = Transform(
-                grid, basis, method="pest", build=True, build_pinv=True
-            )
+        transform = Transform(grid, basis, method="pest", build=True, build_pinv=True)
         assert transform.method == "pest"
         f = self._f(grid.nodes)
         np.testing.assert_allclose(transform.fit(f), self._coeffs(basis), atol=1e-12)
@@ -1005,6 +997,20 @@ class TestPestTransform:
         assert transform.method == "direct1"
 
     @pytest.mark.unit
+    def test_pest_fit_warns(self):
+        """Fitting falls back to the full pseudoinverse with a warning, only then."""
+        basis = self._basis()  # 5 toroidal modes
+        # exact per-plane fit: no warning (warnings are errors in the test suite)
+        Transform(self._grid(5), basis, method="pest", build_pinv=True)
+        # no pseudoinverse requested: never a warning
+        Transform(self._grid(9), basis, method="pest", build=True)
+        with pytest.warns(UserWarning, match="9 zeta planes > 5 toroidal modes"):
+            Transform(self._grid(9), basis, method="pest", build_pinv=True)
+        with pytest.warns(UserWarning, match="unequal or traced number of nodes"):
+            Transform(self._grid(5, ragged=True), basis, method="pest", build_pinv=True)
+
+    @pytest.mark.unit
+    @pytest.mark.filterwarnings("ignore:pest method")  # see test_pest_fit_warns
     def test_pest_under_jit(self):
         """Built and applied under jit."""
         basis = self._basis()
@@ -1045,9 +1051,7 @@ class TestPestTransform:
                 transform.project(y),
             )
 
-        # built under jit, the zeta indices are traced: no per-plane fit
-        with pytest.warns(UserWarning, match="full pseudoinverse"):
-            built_inside = inside(ref.nodes)
+        built_inside = inside(ref.nodes)  # traced zeta indices: full pinv
         built_outside = (  # built outside, applied under jit
             jit(lambda c: build(ref.nodes).transform(c, 0, 1, 0))(c),
             jit(build(ref.nodes, build_pinv=True).fit)(f),

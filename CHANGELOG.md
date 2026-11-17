@@ -1,6 +1,14 @@
 Changelog
 =========
 
+Bug Fixes
+
+- Fixes ``jac_chunk_size="auto"`` running out of memory in the first Jacobian: the chunk is now sized to the memory left in JAX's device pool (75% of a GPU by default) and, on CPU, to the process's cgroup memory limit (e.g. in a Slurm job). The coefficient of its memory estimate is raised from 2.4e-7 to 3e-7 [#2362](https://github.com/PlasmaControl/DESC/issues/2362).
+
+
+v0.17.4
+-------
+
 New Features
 
 - Adds ``desc.external.agni.AgniStability``, the squared growth rate of the most unstable finite-n ideal MHD mode computed by the external AGNI solver (``pip install agnimhd``), with its gradient for optimization.
@@ -38,7 +46,6 @@ Breaking Changes and Deprecations
 Bug Fixes
 
 - Fixes 2nd and 3rd order terms of ``perturb`` (and so of ``Equilibrium.perturb``, ``solve_continuation`` and ``ProximalProjection``) being evaluated along a tangent that included the full value of any fixed parameter of magnitude above 100 (eg pressure, density, temperature or current profiles in SI units), which made the higher order terms worse than no correction. Note that this did not make old results incorrect, rather it just made the optimizations inefficient
-- Fixes ``jac_chunk_size="auto"`` running out of memory in the first Jacobian: the chunk is now sized to the memory left in JAX's device pool (75% of a GPU by default) and, on CPU, to the process's cgroup memory limit (e.g. in a Slurm job). The coefficient of its memory estimate is raised from 2.4e-7 to 3e-7 [#2362](https://github.com/PlasmaControl/DESC/issues/2362).
 - Fixes ``VMECIO.load(profile="current")`` fitting VMEC's half-mesh ``buco`` on the full radial mesh, which shifted the current profile and its edge value.
 - Fixes ``solve_continuation(verbose=0)`` raising ``UnboundLocalError`` on its first step.
 - Fixes the ``Curve.rotmat`` setter, which crashed for list input and silently accepted arrays that were not 3x3 or of length 9.

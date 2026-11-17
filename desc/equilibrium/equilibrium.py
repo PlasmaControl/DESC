@@ -1331,9 +1331,10 @@ class Equilibrium(IOAble, Optimizable):
             Only for ``inbasis`` made of ``"R"``, ``"phi"`` and ``"Z"``. If True,
             points outside the last closed flux surface (see ``is_inside``) are not
             root found: their outputs are NaN, with residual ``inf`` and 0
-            iterations in ``info``. Points too close to the surface to tell in
-            double precision (about 1e-12 m) are root found as usual. Default is
-            False, which leaves every point to the root finding.
+            iterations in ``info``. Points closer to the surface than the mesh of
+            ``is_inside`` resolves (under 1 mm for DESC's example equilibria) may
+            be put on the wrong side, so such a point inside may come back NaN.
+            Default is False, which leaves every point to the root finding.
         kwargs : dict, optional
             Additional keyword arguments to pass to ``root`` such as ``maxiter_ls``,
             ``alpha``.
@@ -1367,7 +1368,7 @@ class Equilibrium(IOAble, Optimizable):
             **kwargs,
         )
 
-    def is_inside(self, coords, params=None):
+    def is_inside(self, coords, params=None, num_theta=256, num_zeta=1024):
         """Test whether points given in real space lie inside the plasma.
 
         See ``desc.equilibrium.coords.is_inside``.
@@ -1378,8 +1379,10 @@ class Equilibrium(IOAble, Optimizable):
             Shape (k, 3).
             Real space coordinates (R, ϕ, Z) of the points.
         params : dict
-            Values of equilibrium parameters to use, e.g. ``eq.params_dict``. Only
-            ``R_lmn`` and ``Z_lmn`` are used.
+            Values of equilibrium parameters to use, e.g. ``eq.params_dict``.
+        num_theta, num_zeta : int
+            Number of grid points in θ and in ζ per field period of the mesh of the
+            last closed flux surface.
 
         Returns
         -------
@@ -1389,7 +1392,7 @@ class Equilibrium(IOAble, Optimizable):
             outside it and for points with non-finite coordinates.
 
         """
-        return is_inside(self, coords, params)
+        return is_inside(self, coords, params, num_theta, num_zeta)
 
     def _get_rtz_grid(
         self,

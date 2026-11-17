@@ -1,6 +1,14 @@
 Changelog
 =========
 
+Bug Fixes
+
+- Coil magnetic fields computed without a ``source_grid`` now use at least ``LinearGrid(N=32)``. The previous default was too coarse for coils with few modes, such as the planar coils from ``initialize_modular_coils``.
+
+
+v0.17.4
+-------
+
 New Features
 
 - Adds ``desc.external.agni.AgniStability``, the squared growth rate of the most unstable finite-n ideal MHD mode computed by the external AGNI solver (``pip install agnimhd``), with its gradient for optimization.
@@ -49,7 +57,6 @@ Bug Fixes
 - Improves planar coil representation (``desc.coils.FourierPlanarCoil`` and ``desc.coils.FourierXYCoil``) internal rotation methods to avoid potential NaNs which could occur when the normal is parallel or antiparallel to Z-axis( to within machine epsilon), and also ensure the gradient at those edge cases is not only not NaN but also non-zero to avoid optimizer stalls at those cases.
 - Fixes potential scaling-based issue in DESC-based optimization methods which use adaptive Hessian scaling (e.g. ``"fmintr"``) that could occur when the problem size was small and there were directions of near-zero derivative in the problem.
 - Fixes computation of ``CoilSetLinkingNumber`` to exclude coil writhe.
-- Coil magnetic fields computed without a ``source_grid`` now use at least ``LinearGrid(N=32)``. The previous default was too coarse for coils with few modes, such as the planar coils from ``initialize_modular_coils``.
 - Adjusts the `quad_weights` of coil objectives of type `_broadcast_input = "node"` to ensure their outputs are roughly independent of grid resolution.
 - Fixes bug in modified Cholesky factorization used by the trust-region
   subproblems when the Gershgorin lower bound of the Hessian was exactly zero

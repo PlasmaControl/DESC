@@ -1,6 +1,14 @@
 Changelog
 =========
 
+Performance Improvements
+
+- Less overhead when updating the targets of linear constraints and reading ``params_dict``, which adds up when an equilibrium is perturbed and re-solved many times (eg in ``ProximalProjection``), especially on a GPU.
+
+
+v0.17.4
+-------
+
 New Features
 
 - Adds ``desc.external.agni.AgniStability``, the squared growth rate of the most unstable finite-n ideal MHD mode computed by the external AGNI solver (``pip install agnimhd``), with its gradient for optimization.
@@ -22,8 +30,9 @@ Performance Improvements
 - Additional memory reductions for ``LinearConstraintProjection`` base memory usage.
 - Reduces the compilation time of custom `qr_multiply` algorithm.
 - Removes a temporary copy of the full output in chunked computations (e.g. Jacobians with `jac_chunk_size`) when the chunk size does not evenly divide the batched dimension.
-- Less overhead when updating the targets of linear constraints and reading ``params_dict``, which adds up when an equilibrium is perturbed and re-solved many times (eg in ``ProximalProjection``), especially on a GPU.
 - ``lsq-exact`` (and ``proximal-lsq-exact``) stops when a rejected step is already smaller than ``xtol`` instead of shrinking the trust region until a step of negligible size is accepted. This saves many function evaluations at the end of an optimization when the objective is only evaluated approximately, as with ``ProximalProjection``.
+- ``field_line_integrate`` no longer recompiles its ODE solver on every call: repeated calls with the same inputs reuse the compiled solver.
+- Stores the surface labels ``rho`` and ``zeta`` as floats, so that surfaces labelled with an int or a float share compiled code.
 
 Breaking Changes and Deprecations
 
@@ -38,6 +47,7 @@ Bug Fixes
 
 - Fixes 2nd and 3rd order terms of ``perturb`` (and so of ``Equilibrium.perturb``, ``solve_continuation`` and ``ProximalProjection``) being evaluated along a tangent that included the full value of any fixed parameter of magnitude above 100 (eg pressure, density, temperature or current profiles in SI units), which made the higher order terms worse than no correction. Note that this did not make old results incorrect, rather it just made the optimizations inefficient
 - Fixes ``VMECIO.load(profile="current")`` fitting VMEC's half-mesh ``buco`` on the full radial mesh, which shifted the current profile and its edge value.
+- Fixes ``solve_continuation(verbose=0)`` raising ``UnboundLocalError`` on its first step.
 - Fixes the ``Curve.rotmat`` setter, which crashed for list input and silently accepted arrays that were not 3x3 or of length 9.
 - Fixes two sign errors in ``c ballooning`` that made ``ideal ballooning lambda`` wrong for equilibria with ψ < 0 or ι < 0 [#2342](https://github.com/PlasmaControl/DESC/issues/2342): an extra ``sign(ψ)`` made the result depend on the direction of B, and for ι < 0 the ``zeta0`` shift of ∇α in ``c ballooning`` had the opposite sign from ``gds2``, so the growth rate grew without bound with ``zeta0``. Results for ψ > 0 and ι > 0 are unchanged.
 - Fixes ``VMECIO.load`` fitting lambda as if ``lmns`` were on the full radial mesh. VMEC stores lambda on the half mesh, so the fitted lambda was shifted by half a radial cell and pulled towards the zero placeholder row at the axis, which gave errors of order 0.1% in ``|B|`` of loaded equilibria. See [#2351](https://github.com/PlasmaControl/DESC/issues/2351). Note that the ``VMECIO.load`` guidance remains the same as before: re-solving the equilibrium in DESC  after loading from a VMEC wout is recommended given the representation differences between the two codes.

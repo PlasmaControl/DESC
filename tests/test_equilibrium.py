@@ -9,10 +9,11 @@ from qic import Qic
 
 from desc.__main__ import main
 from desc.backend import sign
-from desc.basis import FourierZernikeBasis
+from desc.basis import ChebyshevDoubleFourierBasis, FourierZernikeBasis
 from desc.compute.utils import get_transforms
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.equilibrium.coords import (
+    _map_PEST_coordinates,
     _map_poloidal_coordinates,
     _poloidal_series,
     _poloidal_series_indices,
@@ -81,6 +82,24 @@ def test_poloidal_series(spectral_indexing, sym):
         basis.evaluate(nodes, np.array([0, 1, 0])) @ c,
         atol=1e-11,
     )
+
+
+@pytest.mark.unit
+def test_map_PEST_coordinates_other_basis():
+    """Test root finding for theta with a basis other than FourierZernikeBasis."""
+    basis = ChebyshevDoubleFourierBasis(L=2, M=2, N=1, NFP=2)
+    rng = np.random.default_rng(0)
+    L_lmn = 1e-3 * rng.standard_normal(basis.num_modes)
+    nodes = rng.uniform([0, 0, 0], [1, 2 * np.pi, 2 * np.pi], size=(20, 3))
+    coords = nodes.copy()
+    coords[:, 1] += basis.evaluate(nodes) @ L_lmn
+    out = _map_PEST_coordinates(coords, L_lmn, basis, guess=None)
+    np.testing.assert_allclose(out, nodes, rtol=0, atol=1e-5)
+    out, (res, _) = _map_PEST_coordinates(
+        coords, L_lmn, basis, guess=None, full_output=True
+    )
+    np.testing.assert_allclose(out, nodes, rtol=0, atol=1e-5)
+    assert np.all(np.abs(res) < 1e-6)
 
 
 @pytest.mark.unit

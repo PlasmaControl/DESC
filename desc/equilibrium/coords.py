@@ -6,7 +6,7 @@ from functools import partial
 import numpy as np
 
 from desc.backend import OMEGA_IS_0, jit, jnp, rfft, root, root_scalar, vmap
-from desc.basis import fourier, zernike_radial
+from desc.basis import FourierZernikeBasis, fourier, zernike_radial
 from desc.batching import batch_map
 from desc.compute import compute as compute_fun
 from desc.compute import data_index, get_data_deps, get_profiles, get_transforms
@@ -319,8 +319,10 @@ def _map_PEST_coordinates(
         Each row is a different point in space.
     L_lmn : jnp.ndarray
         Spectral coefficients for lambda.
-    L_basis : FourierZernikeBasis
-        Spectral basis for lambda.
+    L_basis : Basis
+        Spectral basis for lambda. A ``FourierZernikeBasis`` is summed over its
+        radial and toroidal modes once per point. Any other basis is evaluated in
+        full at every Newton step.
     guess : jnp.ndarray
         Shape (k, ).
         Optional initial guess for the computational coordinates.
@@ -352,21 +354,71 @@ def _map_PEST_coordinates(
         np.isfinite(period) and period != (2 * jnp.pi),
         msg=f"Period must be ∞ or 2π, but got {period}.",
     )
-    flat, shape = _poloidal_series_indices(L_basis)
-    coords = jnp.atleast_2d(coords)
-    return _map_PEST_kernel(
-        coords,
-        L_lmn,
-        setdefault(guess, coords[:, 1]),  # Assume λ=0 for default initial guess.
-        flat,
-        L_basis.NFP,
-        period,
-        tol,
-        maxiter,
-        shape=shape,
-        full_output=full_output,
-        **kwargs,
+    # a subclass may evaluate differently, so only the class itself
+    if type(L_basis) is FourierZernikeBasis:
+        flat, shape = _poloidal_series_indices(L_basis)
+        coords = jnp.atleast_2d(coords)
+        return _map_PEST_kernel(
+            coords,
+            L_lmn,
+            setdefault(guess, coords[:, 1]),  # Assume λ=0 for default initial guess.
+            flat,
+            L_basis.NFP,
+            period,
+            tol,
+            maxiter,
+            shape=shape,
+            full_output=full_output,
+            **kwargs,
+        )
+
+    # Root finding for θₖ such that r(θₖ) = ϑₖ(ρ, θₖ, ζ) − ϑ = 0.
+    def rootfun(theta, theta_PEST, rho, zeta):
+        nodes = jnp.array([rho.squeeze(), theta.squeeze(), zeta.squeeze()], ndmin=2)
+        A = L_basis.evaluate(nodes)
+        lmbda = A @ L_lmn
+        theta_PEST_k = theta + lmbda
+        return _fixup_residual(theta_PEST_k - theta_PEST, period).squeeze()
+
+    def jacfun(theta, theta_PEST, rho, zeta):
+        # Valid everywhere except θ such that θ+λ = k period where k ∈ ℤ.
+        nodes = jnp.array([rho.squeeze(), theta.squeeze(), zeta.squeeze()], ndmin=2)
+        A1 = L_basis.evaluate(nodes, (0, 1, 0))
+        lmbda_t = jnp.dot(A1, L_lmn)
+        return 1 + lmbda_t.squeeze()
+
+    def fixup(x, *args):
+        return _periodic(x, period)
+
+    vecroot = jit(
+        vmap(
+            lambda x0, *p: root_scalar(
+                rootfun,
+                x0,
+                jac=jacfun,
+                args=p,
+                fixup=fixup,
+                tol=tol,
+                maxiter=maxiter,
+                full_output=full_output,
+                **kwargs,
+            )
+        )
     )
+    rho, theta_PEST, zeta = coords.T
+    theta = vecroot(
+        # Assume λ=0 for default initial guess.
+        setdefault(guess, theta_PEST),
+        theta_PEST,
+        rho,
+        zeta,
+    )
+    if full_output:
+        theta, (res, niter) = theta
+    out = jnp.column_stack([rho, jnp.atleast_1d(theta.squeeze()), zeta])
+    if full_output:
+        return out, (res, niter)
+    return out
 
 
 def _poloidal_series_indices(basis):

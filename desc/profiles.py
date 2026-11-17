@@ -233,20 +233,21 @@ class _Profile(IOAble, ABC):
     def __mul__(self, x):
         """Multiply this profile by another or a constant."""
         if jnp.isscalar(x):
+            copy = self.copy()
             if isinstance(self, ScaledProfile):
-                self.params = self.params[0] * x
-                return self
+                copy.params = copy.params[0] * x
+                return copy
             if (
                 isinstance(self, PowerSeriesProfile)
                 or isinstance(self, SplineProfile)
                 or isinstance(self, HermiteSplineProfile)
                 or isinstance(self, FourierZernikeProfile)
             ):
-                self.params *= x
-                return self
+                copy.params *= x
+                return copy
             if isinstance(self, TwoPowerProfile):
-                self.params *= np.array([x, 1, 1])
-                return self
+                copy.params *= np.array([x, 1, 1])
+                return copy
             return ScaledProfile(x, self)
         elif isinstance(x, _Profile):
             return ProductProfile(self, x)
@@ -275,9 +276,10 @@ class _Profile(IOAble, ABC):
     def __pow__(self, x):
         """Raise this profile to a power."""
         if jnp.isscalar(x):
+            copy = self.copy()
             if isinstance(self, PowerProfile):
-                self._power *= x
-                return self
+                copy.params = copy.params[0] * x
+                return copy
             return PowerProfile(x, self)
         else:
             raise NotImplementedError()

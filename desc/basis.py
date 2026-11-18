@@ -2320,7 +2320,7 @@ def ifftfit(y_c, axis, n=None):
     Parameters
     ----------
     y : ndarray, shape(...,2N+1,...)
-        Function to decompose into basis of Chebyshev functions.
+        Function to decompose into Fourier basis.
     axis : int
         Axis along which to transform y.
     n : int

@@ -43,8 +43,7 @@ class Transform(IOAble):
         whether to precompute the transforms now or do it later
     build_pinv : bool
         whether to precompute the pseudoinverse now or do it later
-    method : {``'auto'``, ``'fft'``, ``'direct1'``, ``'direct2'``, ``'pest'``,
-              ``'jitable'``}
+    method : {"auto", "fft", "direct1", "direct2", "pest", "jitable"}
         * ``'fft'`` uses fast fourier transforms in the zeta direction, and so must have
           equally spaced toroidal nodes, and the same node pattern on each zeta plane.
         * ``'direct1'`` uses full matrices and can handle arbitrary node patterns and

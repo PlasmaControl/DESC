@@ -153,11 +153,13 @@ class Equilibrium(IOAble, Optimizable):
         ensure that this equilibrium has a right handed orientation. Do not set to False
         unless you are sure the parameterization you have given is right handed
         (ie, e_theta x e_zeta points outward from the surface).
-    ensure_nested : bool
+    ensure_nested : {True, False, "map2disc","opt"}
         If True, and the default initial guess does not produce nested surfaces,
-        run a small optimization problem to attempt to refine initial guess to improve
-        coordinate mapping.
-
+        attempt to refine the initial guess to improve coordinate mapping. The
+        ``map2disc-jax`` package will be used by default to solve a harmonic BVP to
+        refine the mapping. If not installed, a small optimization problem is solved
+        instead. One can also pass the string ``"map2disc"`` or ``"opt"`` to specify
+        which method to use.
     """
 
     _io_attrs_ = [
@@ -528,10 +530,15 @@ class Equilibrium(IOAble, Optimizable):
                 optionally lambda) at fixed flux coordinates. All arrays should have the
                 same length. Optionally, an ndarray of shape(k,3) may be passed instead
                 of a grid.
-        ensure_nested : bool
-            If True, and the default initial guess does not produce nested surfaces,
-            run a small optimization problem to attempt to refine initial guess to
-            improve coordinate mapping.
+        ensure_nested : {True, False, "map2disc", "opt"}
+            If True, and the initial guess does not produce nested surfaces,
+            attempt to refine the initial guess to improve coordinate mapping. The
+            ``map2disc_jax`` package will be used by default to solve a harmonic BVP
+            to refine the mapping. If not installed, a small optimization problem
+            using the GoodCoordinates objective is solved instead. One can also pass
+            the string ``"map2disc"`` or ``"opt"`` to specify which method to use.
+            If ``"map2disc"`` is requested but ``map2disc_jax`` is not installed,
+            warn and fall back to ``"opt"``.
 
         Examples
         --------

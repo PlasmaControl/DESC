@@ -272,6 +272,7 @@ Objective Functions
     desc.objectives.MeanCurvature
     desc.objectives.MercierStability
     desc.objectives.MirrorRatio
+    desc.objectives.NeutronWallLoading
     desc.objectives.ObjectiveFromUser
     desc.objectives.ObjectiveFunction
     desc.objectives.Omnigenity

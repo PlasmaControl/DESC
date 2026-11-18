@@ -1613,6 +1613,13 @@ def test_bootstrap_optimization_comparison_qa():
         optimizer="proximal-lsq-exact",
         maxiter=10,
         verbose=3,
+        options={
+            "solve_options": {
+                "ftol": 1e-3,
+                "maxiter": 30,
+                "options": {"tr_method": "cho"},
+            }
+        },
     )
 
     # method 2
@@ -1624,7 +1631,14 @@ def test_bootstrap_optimization_comparison_qa():
         rho = grid.compress(data["rho"])
         XX = np.fliplr(np.vander(rho, eq2.L + 1)[:, :-2])
         eq2.c_l = np.pad(np.linalg.lstsq(XX, current, rcond=None)[0], (2, 0))
-        eq2, _ = eq2.solve(objective="force", optimizer="lsq-exact", verbose=3)
+        eq2, _ = eq2.solve(
+            objective="force",
+            optimizer="lsq-exact",
+            ftol=1e-3,
+            maxiter=30,
+            verbose=3,
+            options={"tr_method": "cho"},
+        )
 
     grid = LinearGrid(
         M=eq0.M_grid,

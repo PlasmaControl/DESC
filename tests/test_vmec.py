@@ -21,6 +21,7 @@ from desc.vmec_utils import (
     ptolemy_identity_rev,
     ptolemy_linear_transform,
     vmec_boundary_subspace,
+    vmec_profile,
     zernike_to_fourier,
 )
 
@@ -1852,3 +1853,67 @@ def test_load_current_half_mesh():
     )
     # total current at the edge, extrapolated from the half mesh as VMEC does
     np.testing.assert_allclose(eq.current(np.array([1.0])), ctor, rtol=1e-8)
+
+
+@pytest.mark.unit
+def test_vmec_profile_types():
+    """VMEC input profile types are evaluated as LIBSTELL does."""
+    from scipy.special import erf
+
+    s = np.array([0.0, 0.25, 0.3, 0.75, 1.0])
+    knots = np.linspace(0, 1, 5)
+    # VMEC pads the knot arrays with zeros
+    quadratic = {
+        "ac_aux_s": np.append(knots, [0.0, 0.0]),
+        "ac_aux_f": np.append(1 + knots**2, [0.0, 0.0]),
+    }
+    linear = {"ac_aux_s": knots, "ac_aux_f": 1 + 2 * knots}
+    segments = {"ac_aux_s": [0.0, 0.5, 1.0], "ac_aux_f": [1.0, 2.0]}
+    edge = np.exp(-4.0)
+    cases = [
+        # pressure and iota are given directly
+        ("pmass", {"am": [1, 2, 3]}, 1 + 2 * s + 3 * s**2),
+        ("pmass", {"am": [0, 1], "bloat": 2.0}, np.minimum(2 * s, 1)),
+        ("piota", {"ai": [0, 1], "bloat": 2.0}, s),
+        (
+            "pmass",
+            {"pmass_type": "gauss_trunc", "am": [3, 0.5]},
+            3 * (np.exp(-4 * s**2) - edge) / (1 - edge),
+        ),
+        (
+            "pmass",
+            {"pmass_type": "two_lorentz", "am": [2, 1, 1, 1, 1, 1, 1, 1]},
+            4 / (1 + s) - 2,
+        ),
+        # current types without a suffix give I'(s), which VMEC integrates
+        ("pcurr", {"ac": [1, 2]}, s + s**2),
+        ("pcurr", {"pcurr_type": "two_power", "ac": [2, 1, 1]}, 2 * s - s**2),
+        (
+            "pcurr",
+            {"pcurr_type": "gauss_trunc", "ac": [3, 0.5]},
+            3 * (0.25 * np.sqrt(np.pi) * erf(2 * s) - edge * s),
+        ),
+        # _I types give I(s) and _Ip types I'(s)
+        ("pcurr", {"pcurr_type": "power_series_I", "ac": [1, 2]}, s + 2 * s**2),
+        (
+            "pcurr",
+            {"pcurr_type": "line_segment_I", **segments},
+            np.interp(s, [0, 0.5, 1], [1, 2, 0]),
+        ),
+        (
+            "pcurr",
+            {"pcurr_type": "line_segment_Ip", **segments},
+            np.where(s < 0.5, s + s**2, -0.25 + 4 * s - 2 * s**2 - 0.5),
+        ),
+        # splines through a quadratic or a line reproduce it
+        ("pcurr", {"pcurr_type": "cubic_spline_I", **quadratic}, 1 + s**2),
+        ("pcurr", {"pcurr_type": "cubic_spline_Ip", **quadratic}, s + s**3 / 3),
+        ("pcurr", {"pcurr_type": "Akima_spline_I", **linear}, 1 + 2 * s),
+        ("pcurr", {"pcurr_type": "Akima_spline_Ip", **linear}, s + s**2),
+    ]
+    for kind, data, values in cases:
+        np.testing.assert_allclose(
+            vmec_profile(data, kind, s), values, rtol=1e-10, atol=1e-12, err_msg=data
+        )
+    with pytest.raises(ValueError, match="not supported"):
+        vmec_profile({"pmass_type": "pedestal"}, "pmass", s)

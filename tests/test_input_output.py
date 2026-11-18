@@ -349,6 +349,61 @@ def test_from_input_file_equilibrium_desc_vmec():
 
 
 @pytest.mark.unit
+def test_vmec_input_profile_types(tmpdir_factory):
+    """Non-polynomial VMEC profiles become splines with VMEC's current sign."""
+    tmp_path = tmpdir_factory.mktemp("desc_inputs").join("input.profiles")
+    tmp_path.write("""&INDATA
+  NFP = 1  MPOL = 4  NTOR = 0  PHIEDGE = 1.0
+  PMASS_TYPE = 'two_power'  AM = 1.0E4 1.0 2.0  PRES_SCALE = 2.0
+  NCURR = 1  CURTOR = 1.0E5
+  PCURR_TYPE = 'sum_atan'  AC = 0.0 1.0 2.0 1.0 1.0
+  RBC(0,0) = 10.0  RBC(0,1) = 1.0  ZBS(0,1) = 1.0
+/
+""")
+    ir = InputReader(cl_args=[str(tmp_path)])
+    rho = np.array([0.0, 0.5, 0.9])
+    s = rho**2
+    grid = LinearGrid(rho=rho)
+    inputs = ir.inputs[-1]
+    np.testing.assert_allclose(
+        inputs["pressure"](grid), 2.0e4 * (1 - s) ** 2, rtol=1e-6, atol=1e-6
+    )
+    # VMEC normalises the current to signgs * CURTOR, and signgs = -1 here
+    np.testing.assert_allclose(
+        inputs["current"](grid),
+        -1.0e5 * 2 / np.pi * np.arctan(2 * s / (1 - s)),
+        rtol=1e-6,
+        atol=1e-4,
+    )
+
+
+@pytest.mark.unit
+def test_vmec_input_profile_iota_pedestal():
+    """Tabulated iota and the pressure pedestal of a VMEC input are converted."""
+    vmec_str = """&INDATA
+  NFP = 1  MPOL = 4  NTOR = 0  PHIEDGE = 1.0
+  AM = 1.0 -1.0  SPRES_PED = 0.64
+  PIOTA_TYPE = 'line_segment'
+  AI_AUX_S(1:3) = 0.0 0.5 1.0  AI_AUX_F(1:3) = 1.0 0.8 0.2
+  RBC(0,0) = 10.0  RBC(0,1) = 1.0  ZBS(0,1) = 1.0
+/
+"""
+    spline = InputReader.parse_vmec_inputs(StringIO(vmec_str))[0]["spline"]
+    s = np.array([0.0, 0.25, 0.5, 0.8, 1.0])
+    # VMEC holds the pressure at its value at SPRES_PED outside it
+    np.testing.assert_allclose(
+        np.interp(np.sqrt(s), spline["rho"], spline["pressure"]),
+        1 - np.minimum(s, 0.64),
+        atol=1e-4,
+    )
+    np.testing.assert_allclose(
+        np.interp(np.sqrt(s), spline["rho"], spline["iota"]),
+        np.interp(s, [0, 0.5, 1], [1, 0.8, 0.2]),
+        atol=1e-4,
+    )
+
+
+@pytest.mark.unit
 def test_vmec_input_surface_threshold():
     """Test ."""
     path = ".//tests//inputs//input.QSC_r2_5.5_vmec"
@@ -469,8 +524,9 @@ $
     assert inputs["M"] == inputs["N"] == 2
     assert "iota" not in inputs
     np.testing.assert_allclose(inputs["pressure"], [[0, 2.0], [2, 0.0], [4, -2.0]])
-    # I(s) = AC(0)*s + AC(1)*s^2 + AC(2)*s^3, scaled so I(1) = CURTOR
-    np.testing.assert_allclose(inputs["current"], [[2, 2.0], [4, 4.0], [6, 6.0]])
+    # I(s) = AC(0)*s + AC(1)*s^2 + AC(2)*s^3, scaled so I(1) = signgs * CURTOR,
+    # and signgs = -1 for this boundary
+    np.testing.assert_allclose(inputs["current"], [[2, -2.0], [4, -4.0], [6, -6.0]])
     # VMEC axis sin terms are negated in DESC
     np.testing.assert_allclose(
         inputs["axis"],
@@ -485,11 +541,12 @@ $
 @pytest.mark.parametrize(
     "pcurr_type, current",
     [
-        # I'(s) = 1 + 2s -> I(s) = s + s^2, scaled so I(1) = CURTOR
-        ("power_series", [[0, 0], [2, 3.0], [4, 3.0]]),
-        ("Power_Series", [[0, 0], [2, 3.0], [4, 3.0]]),
-        # I(s) = s + 2s^2, scaled so I(1) = CURTOR
-        ("power_series_I", [[2, 2.0], [4, 4.0]]),
+        # scaled so I(1) = signgs * CURTOR, and signgs = -1 for this boundary
+        # I'(s) = 1 + 2s -> I(s) = s + s^2
+        ("power_series", [[0, 0], [2, -3.0], [4, -3.0]]),
+        ("Power_Series", [[0, 0], [2, -3.0], [4, -3.0]]),
+        # I(s) = s + 2s^2
+        ("power_series_I", [[2, -2.0], [4, -4.0]]),
     ],
 )
 def test_vmec_input_current(pcurr_type, current):

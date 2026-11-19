@@ -1,6 +1,14 @@
 Changelog
 =========
 
+Bug Fixes
+
+- Fixes ``FourierRZCurve.from_values`` rejecting curves whose points do not start at the first sample at or after ``phi = 0``, such as a closed curve given with ``phi`` from ``-pi`` to ``pi``.
+
+
+v0.17.4
+-------
+
 New Features
 
 - Adds ``desc.external.agni.AgniStability``, the squared growth rate of the most unstable finite-n ideal MHD mode computed by the external AGNI solver (``pip install agnimhd``), with its gradient for optimization.

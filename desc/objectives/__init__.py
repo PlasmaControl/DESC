@@ -138,6 +138,7 @@ __all__ = [
     "FixCurrent",
     "FixElectronDensity",
     "FixElectronTemperature",
+    "FixIonDensity",
     "FixIonTemperature",
     "FixIota",
     "FixModeR",

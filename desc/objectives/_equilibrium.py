@@ -61,6 +61,8 @@ class ForceBalance(_Objective):
         grid=None,
         name="force",
         jac_chunk_size=None,
+        device_id=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -76,6 +78,8 @@ class ForceBalance(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
+            rank=rank,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -215,6 +219,8 @@ class ForceBalanceAnisotropic(_Objective):
         grid=None,
         name="force-anisotropic",
         jac_chunk_size=None,
+        device_id=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -230,6 +236,8 @@ class ForceBalanceAnisotropic(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
+            rank=rank,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -351,6 +359,8 @@ class RadialForceBalance(_Objective):
         grid=None,
         name="radial force",
         jac_chunk_size=None,
+        device_id=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -366,6 +376,8 @@ class RadialForceBalance(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
+            rank=rank,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -487,6 +499,8 @@ class HelicalForceBalance(_Objective):
         grid=None,
         name="helical force",
         jac_chunk_size=None,
+        device_id=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -502,6 +516,8 @@ class HelicalForceBalance(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
+            rank=rank,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -624,6 +640,8 @@ class Energy(_Objective):
         gamma=0,
         name="energy",
         jac_chunk_size=None,
+        device_id=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -640,6 +658,8 @@ class Energy(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
+            rank=rank,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -766,6 +786,8 @@ class CurrentDensity(_Objective):
         grid=None,
         name="current density",
         jac_chunk_size=None,
+        device_id=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -781,6 +803,8 @@ class CurrentDensity(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
+            rank=rank,
         )
 
     def build(self, use_jit=True, verbose=1):

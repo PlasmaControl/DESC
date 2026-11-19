@@ -2343,14 +2343,7 @@ class TestObjectiveFunction:
         source_grid = QuadratureGridFlux(
             L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
         )
-        surface_grid = LinearGridFlux(
-            rho=1.0,
-            M=eq.M_grid,
-            N=eq.N_grid,
-            NFP=eq.NFP,
-            sym=False,
-            endpoint=True,
-        )
+        surface_grid = LinearGridToroidalSurface(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
 
         obj = NeutronWallLoading(
             eq=eq,
@@ -3633,20 +3626,17 @@ class TestComputeScalarResolution:
         """NeutronWallLoading."""
         eq = get("reactor_QA")
         f = np.zeros(4, dtype=float)
-        for i, res in enumerate([0.75, 1.0, 1.25, 1.5]):
+        for i, res in enumerate([1, 1.25, 1.5, 2]):
             source_grid = QuadratureGridFlux(
-                L=max(2, int(round(eq.L_grid * res))),
-                M=max(2, int(round(eq.M_grid * res))),
-                N=max(1, int(round(eq.N_grid * res))),
+                L=int(round(eq.L_grid * res)),
+                M=int(round(eq.M_grid * res)),
+                N=int(round(eq.N_grid * res)),
                 NFP=eq.NFP,
             )
-            surface_grid = LinearGridFlux(
-                rho=1.0,
-                M=max(2, int(round(eq.M_grid * res))),
-                N=max(1, int(round(eq.N_grid * res))),
+            surface_grid = LinearGridToroidalSurface(
+                M=int(round(eq.M_grid * res)),
+                N=int(round(eq.N_grid * res)),
                 NFP=eq.NFP,
-                sym=False,
-                endpoint=True,
             )
             obj = ObjectiveFunction(
                 NeutronWallLoading(
@@ -3659,7 +3649,7 @@ class TestComputeScalarResolution:
             )
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
-        np.testing.assert_allclose(f, f[-1], rtol=6e-2)
+        np.testing.assert_allclose(f, f[-1], rtol=5e-2)
 
     @pytest.mark.regression
     def test_compute_scalar_resolution_boundary_error(self):
@@ -4204,19 +4194,9 @@ class TestObjectiveNaNGrad:
         # Using half the resolution to speed up testing.
         eq = get("reactor_QA")
         source_grid = QuadratureGridFlux(
-            L=max(2, eq.L_grid // 2),
-            M=max(2, eq.M_grid // 2),
-            N=max(1, eq.N_grid // 2),
-            NFP=eq.NFP,
+            L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
         )
-        surface_grid = LinearGridFlux(
-            rho=1.0,
-            M=max(2, eq.M_grid // 2),
-            N=max(1, eq.N_grid // 2),
-            NFP=eq.NFP,
-            sym=False,
-            endpoint=True,
-        )
+        surface_grid = LinearGridToroidalSurface(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         obj = ObjectiveFunction(
             NeutronWallLoading(
                 eq=eq,

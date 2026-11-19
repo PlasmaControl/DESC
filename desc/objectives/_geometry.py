@@ -866,8 +866,8 @@ class NeutronWallLoading(_Objective):
         Collocation grid containing the nodes to evaluate source geometry at.
         Defaults to ``QuadratureGridFlux(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)``.
     surface_grid : Grid, optional
-        Collocation grid containing the nodes to evaluate surface geometry at. Defaults
-        to ``LinearGridFlux(rho=1, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)``.
+        Collocation grid containing the nodes to evaluate surface geometry at.
+        Defaults to ``LinearGridToroidalSurface(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)``.
     fuel : str, optional
         Fusion fuel, assuming a 50/50 mix. One of {'DT'}. Default = 'DT'.
     eq_fixed, surface_fixed : bool, optional
@@ -1030,33 +1030,15 @@ class NeutronWallLoading(_Objective):
         )
 
         if self._surface_grid is None:
-            surface_grid = LinearGridFlux(
-                rho=1.0,
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-                sym=False,
+            self._surface_grid = LinearGridToroidalSurface(
+                M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False
             )
-        else:
-            surface_grid = self._surface_grid
+        surface_grid = self._surface_grid
         if self._source_grid is None:
-            source_grid = QuadratureGridFlux(
-                L=eq.L_grid,
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
+            self._source_grid = QuadratureGridFlux(
+                L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
             )
-        else:
-            source_grid = self._source_grid
-        warnif(
-            not np.allclose(surface_grid.nodes[:, 0], 1),
-            UserWarning,
-            "Surface grid includes off-surface pts, should be rho=1.",
-        )
-
-        # stash the grids so compute uses the actual defaults we built above
-        self._source_grid = source_grid
-        self._surface_grid = surface_grid
+        source_grid = self._source_grid
 
         self._dim_f = surface_grid.num_nodes
         self._equil_data_keys = ["R", "phi", "Z", "sqrt(g)", "<sigma*nu>", "ni"]
@@ -1080,10 +1062,7 @@ class NeutronWallLoading(_Objective):
             has_axis=source_grid.axis.size,
         )
         surface_transforms = get_transforms(
-            self._surface_data_keys,
-            obj=surface,
-            grid=surface_grid,
-            has_axis=surface_grid.axis.size,
+            self._surface_data_keys, obj=surface, grid=surface_grid
         )
 
         # compute returns points on the grid of the surface

@@ -41,6 +41,27 @@ Alternatively, if you don't want to preallocate memory (for debugging or memory 
 Note that each environment variable has their pros and cons for XLA compiler, and can prevent different types of OOM errors. For example, the second option presented above is documented to have a slight performance hit due to allocation and de-allocation of GPU memory, hence we recommend it for only memory profiling. For more details on the memory allocation in JAX, we strongly recommend refering to the official JAX documentation `here <https://jax.readthedocs.io/en/latest/gpu_memory_allocation.html>`__.
 
 
+Number of BLAS Threads on CPU
+-----------------------------
+On CPU, the least-squares optimizers alternate between LAPACK calls, which run on the thread pool of the BLAS library, and JAX operations, which run on the thread pool of XLA. BLAS libraries such as OpenBLAS start one thread per core by default, so the two pools compete for the same cores. This can make solves slower and their run times erratic. For example, a fixed-boundary solve with 2097 parameters on 16 CPU cores took 43 to 86 s with the default and 33 to 46 s with 8 BLAS threads. The best value depends on the machine, so it is worth timing a few values, starting with about half of the available cores. The variables must be set before NumPy or JAX is imported, for example in the shell:
+
+.. code-block:: bash
+
+    export OPENBLAS_NUM_THREADS=8
+    export OMP_NUM_THREADS=8
+
+or at the very top of the script:
+
+.. code-block:: python
+
+    import os
+
+    os.environ["OPENBLAS_NUM_THREADS"] = "8"
+    os.environ["OMP_NUM_THREADS"] = "8"
+
+With Intel MKL, use ``MKL_NUM_THREADS`` instead of ``OPENBLAS_NUM_THREADS``.
+
+
 Reducing Memory Usage of Objective Jacobian Calculation
 -------------------------------------------------------
 

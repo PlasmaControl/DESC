@@ -1,6 +1,14 @@
 Changelog
 =========
 
+Bug Fixes
+
+- Fixes the CPU fallback of ``desc.set_device("gpu")`` when no NVIDIA driver is found or JAX has no GPU backend.
+
+
+v0.17.4
+-------
+
 New Features
 
 - Adds ``desc.external.agni.AgniStability``, the squared growth rate of the most unstable finite-n ideal MHD mode computed by the external AGNI solver (``pip install agnimhd``), with its gradient for optimization.

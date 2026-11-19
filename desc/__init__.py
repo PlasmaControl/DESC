@@ -101,6 +101,7 @@ def set_device(kind="cpu", gpuid=None):
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
         # pynvml namespace is exposed through nvidia-ml-py
         from pynvml import (
+            NVMLError,
             nvmlDeviceGetCount,
             nvmlDeviceGetHandleByIndex,
             nvmlDeviceGetMemoryInfo,
@@ -110,7 +111,13 @@ def set_device(kind="cpu", gpuid=None):
             nvmlShutdown,
         )
 
-        nvmlInit()
+        try:
+            nvmlInit()
+        except NVMLError as e:
+            # without a working NVIDIA driver, JAX can't use a GPU either
+            warnings.warn(f"No usable NVIDIA driver ({e}), falling back to CPU")
+            config["kind"] = None
+            return set_device("cpu")
         try:
             visible = os.environ.get("CUDA_VISIBLE_DEVICES", "").split(",")
             visible = [i for i in visible if i.strip()]

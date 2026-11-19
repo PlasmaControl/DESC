@@ -43,12 +43,15 @@ else:
                 os.environ["XLA_FLAGS"] = _xla_flags.strip()
 
             jax_config.update("jax_enable_x64", True)
-            if desc_config.get("kind") == "gpu" and len(jax.devices("gpu")) == 0:
+            if desc_config.get("kind") == "gpu" and jax.default_backend() != "gpu":
+                # tested in a subprocess, where coverage does not see these lines
+                set_device("cpu")  # pragma: no cover
+                # show this warning, unlike the ones above
+                warnings.simplefilter("default")  # pragma: no cover
                 warnings.warn(
                     "JAX failed to detect GPU, are you sure you "
                     + "installed JAX with GPU support?"
                 )
-                set_device("cpu")
             if desc_config.get("kind") == "tpu":
                 desc_config["avail_mem"] = (
                     jax.devices("tpu")[0].memory_stats()["bytes_limit"] / 1024**3

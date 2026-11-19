@@ -1105,6 +1105,35 @@ def test_BdotgradB(DummyStellarator):
 
 
 @pytest.mark.unit
+def test_grad_B_xyz():
+    """Test grad(B) in the xyz basis against finite differences of B in xyz."""
+    # grad(B)[j, k] = ∂B_k/∂x_j, so e_rho · grad(B) = ∂B/∂rho etc. The xyz unit
+    # vectors are constant, so ∂B/∂rho is a finite difference of the xyz components.
+    eq = get("HELIOTRON")
+    nodes = {
+        "rho": np.linspace(0.2, 0.9, 50),
+        "theta": np.linspace(0, 2 * np.pi, 100, endpoint=False),
+        "zeta": np.linspace(0, 2 * np.pi / eq.NFP, 50, endpoint=False),
+    }
+    # phi ≠ 0 so that the rotation from rpz to xyz is not the identity
+    fixed = {"rho": np.array([0.6]), "theta": np.array([0.7]), "zeta": np.array([0.25])}
+    for label, x in nodes.items():
+        grid = LinearGrid(NFP=eq.NFP, **{**fixed, label: x})
+        data = eq.compute(["grad(B)", "B", "e_" + label], grid=grid, basis="xyz")
+        actual = np.einsum("nj,njk->nk", data["e_" + label], data["grad(B)"])
+        desired = np.stack(
+            [my_convolve(data["B"][:, k], FD_COEF_1_4) for k in range(3)], axis=-1
+        ) / (x[1] - x[0])
+        np.testing.assert_allclose(
+            actual[2:-2],
+            desired[2:-2],
+            rtol=1e-3,
+            atol=1e-3 * np.max(np.abs(desired[2:-2])),
+            err_msg=label,
+        )
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize("sym", [False, "cos", "sin", "custom"])
 def test_boozer_projection(sym):
     """Compare Boozer projections and derivatives with dense basis evaluation."""

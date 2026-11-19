@@ -1289,7 +1289,7 @@ class TestMagneticFields:
             NFP=40,
             check_intersection=False,
         )
-        r0 = [10.0]
+        r0 = [4.5]
         z0 = [0.0]
         phis = [0, np.pi]
         r, z = field_line_integrate(r0, z0, phis, field, bs_chunk_size=1000)

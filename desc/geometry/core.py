@@ -69,10 +69,14 @@ class Curve(IOAble, Optimizable, ABC):
 
     @rotmat.setter
     def rotmat(self, new):
-        if len(new) == 9:
-            self._rotmat = jnp.asarray(new)
+        new = jnp.asarray(new)
+        if new.size == 9:
+            self._rotmat = new.flatten()
         else:
-            self._rotmat = jnp.asarray(new.flatten())
+            raise ValueError(
+                "rotmat should be a 3x3 matrix or 9 element vector, "
+                f"got shape {new.shape}"
+            )
 
     @property
     def name(self):
@@ -420,6 +424,11 @@ class Surface(IOAble, Optimizable, ABC):
         self._L = int(self._L)
         self._M = int(self._M)
         self._N = int(self._N)
+        # surface labels as floats, as set by the constructors, so that surfaces
+        # loaded from older files have the same pytree leaf types
+        for attr in ["_rho", "_zeta"]:
+            if getattr(self, attr, None) is not None:
+                setattr(self, attr, float(getattr(self, attr)))
 
     @property
     def name(self):

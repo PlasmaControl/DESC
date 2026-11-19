@@ -21,6 +21,19 @@ from desc.utils import (
     warnif,
 )
 
+__all__ = [
+    "FourierZernikeProfile",
+    "HermiteSplineProfile",
+    "MTanhProfile",
+    "PowerProfile",
+    "PowerSeriesProfile",
+    "ProductProfile",
+    "ScaledProfile",
+    "SplineProfile",
+    "SumProfile",
+    "TwoPowerProfile",
+]
+
 
 class _Profile(IOAble, ABC):
     """Abstract base class for profiles.

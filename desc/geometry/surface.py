@@ -38,6 +38,7 @@ from desc.utils import (
 )
 
 from .core import Surface
+from .curve import FourierRZCurve
 
 __all__ = ["FourierRZToroidalSurface", "ZernikeRZToroidalSection"]
 
@@ -151,7 +152,7 @@ class FourierRZToroidalSurface(Surface):
         self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, 1:])
         self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, 1:])
         self._sym = bool(sym)
-        self._rho = rho
+        self._rho = float(rho)
 
         if check_orientation and self._compute_orientation() == -1:
             warnings.warn(
@@ -189,7 +190,7 @@ class FourierRZToroidalSurface(Surface):
 
     @rho.setter
     def rho(self, rho):
-        self._rho = rho
+        self._rho = float(rho)
 
     @execute_on_cpu
     def change_resolution(self, *args, **kwargs):
@@ -767,7 +768,7 @@ class FourierRZToroidalSurface(Surface):
         else:
             return offset_surface
 
-    def get_axis(self):
+    def get_axis(self) -> FourierRZCurve:
         """Get the axis of the surface.
 
         This method calculates the axis of the surface by finding the mid point of the
@@ -785,8 +786,6 @@ class FourierRZToroidalSurface(Surface):
             Axis of the surface.
 
         """
-        from desc.geometry import FourierRZCurve
-
         # over-sample to get a good axis fit
         grid = LinearGridToroidalSurface(theta=2, zeta=self.N * 4, NFP=self.NFP)
         data = self.compute(["R", "Z"], grid=grid)
@@ -975,7 +974,7 @@ class ZernikeRZToroidalSection(Surface):
         self._sym = bool(sym)
         self._spectral_indexing = str(spectral_indexing)
 
-        self._zeta = zeta
+        self._zeta = float(zeta)
 
         if check_orientation and self._compute_orientation() == -1:
             warnings.warn(
@@ -1010,7 +1009,7 @@ class ZernikeRZToroidalSection(Surface):
 
     @zeta.setter
     def zeta(self, zeta):
-        self._zeta = zeta
+        self._zeta = float(zeta)
 
     @execute_on_cpu
     def change_resolution(self, *args, **kwargs):
@@ -1131,7 +1130,7 @@ class ZernikeRZToroidalSection(Surface):
                 idxZ = self.Z_basis.get_idx(ll, mm, 0)
                 self.Z_lmn = put(self.Z_lmn, idxZ, ZZ)
 
-    def get_axis(self):
+    def get_axis(self) -> FourierRZCurve:
         """Get the axis of the surface.
 
         Computes the R and Z value at rho=0 and creates N=0 FourierRZCurve

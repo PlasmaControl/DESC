@@ -29,14 +29,19 @@ from ._utils import (
 )
 
 __all__ = [
+    "AbstractGridCurve",
     "CustomGridCurve",
     "LinearGridCurve",
+    "AbstractGridFlux",
     "ConcentricGridFlux",
     "CustomGridFlux",
     "LinearGridFlux",
     "QuadratureGridFlux",
+    "AbstractGridToroidalSurface",
     "CustomGridToroidalSurface",
     "LinearGridToroidalSurface",
+    "find_least_rational_surfaces",
+    "find_most_rational_surfaces",
 ]
 
 

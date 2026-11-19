@@ -1209,35 +1209,39 @@ def plot_3d(  # noqa : C901
     showticklabels = kwargs.pop("showticklabels", True)
     showaxislabels = kwargs.pop("showaxislabels", True)
 
-    if name != "B*n":
-        data, label = _compute(
-            eq,
-            name,
-            grid,
-            component=component,
-            compute_kwargs=compute_kwargs,
-        )
-    else:
-        data, label = _compute_Bn(
-            eq=eq,
-            field=kwargs.pop("field", None),
-            plot_grid=grid,
-            field_grid=kwargs.pop("field_grid", None),
-            chunk_size=kwargs.pop("chunk_size", None),
-            B_plasma_chunk_size=kwargs.pop("B_plasma_chunk_size", None),
-        )
-
-    if normalize:
-        norm_data, _ = _compute(eq, normalize, grid, reshape=False)
-        data = data / np.nanmean(np.abs(norm_data))  # normalize
-
-    errorif(
-        len(kwargs) != 0,
-        msg=f"plot_3d got unexpected keyword argument: {kwargs.keys()}",
-    )
-
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
+        warnings.filterwarnings(
+            "ignore",
+            message="Unequal number of field periods for grid .* and basis .*",
+            category=UserWarning,
+        )
+        if name != "B*n":
+            data, label = _compute(
+                eq,
+                name,
+                grid,
+                component=component,
+                compute_kwargs=compute_kwargs,
+            )
+        else:
+            data, label = _compute_Bn(
+                eq=eq,
+                field=kwargs.pop("field", None),
+                plot_grid=grid,
+                field_grid=kwargs.pop("field_grid", None),
+                chunk_size=kwargs.pop("chunk_size", None),
+                B_plasma_chunk_size=kwargs.pop("B_plasma_chunk_size", None),
+            )
+
+        if normalize:
+            norm_data, _ = _compute(eq, normalize, grid, reshape=False)
+            data = data / np.nanmean(np.abs(norm_data))  # normalize
+
+        errorif(
+            len(kwargs) != 0,
+            msg=f"plot_3d got unexpected keyword argument: {kwargs.keys()}",
+        )
+
         coords = eq.compute(["X", "Y", "Z"], grid=grid)
     X = coords["X"].reshape((grid.num_x1, grid.num_x0, grid.num_x2), order="F")
     Y = coords["Y"].reshape((grid.num_x1, grid.num_x0, grid.num_x2), order="F")

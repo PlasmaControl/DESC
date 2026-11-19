@@ -43,7 +43,7 @@ Note that each environment variable has their pros and cons for XLA compiler, an
 
 Number of BLAS Threads on CPU
 -----------------------------
-On CPU, the least-squares optimizers alternate between LAPACK calls, which run on the thread pool of the BLAS library, and JAX operations, which run on the thread pool of XLA. BLAS libraries such as OpenBLAS start one thread per core by default, so the two pools compete for the same cores. This can make solves slower and their run times erratic. A fixed-boundary solve with 2097 parameters on 16 CPU cores took 43 to 86 s with the default and 33 to 46 s with 8 BLAS threads. The best value depends on the machine, so it is worth timing a few values, starting with about half of the available cores. The variables must be set before NumPy or JAX is imported, either in the shell:
+On CPU, the least-squares optimizers alternate between LAPACK calls, which run on the thread pool of the BLAS library, and JAX operations, which run on the thread pool of XLA. BLAS libraries such as OpenBLAS start one thread per core by default, so the two pools compete for the same cores. This can make solves slower and their run times erratic. The best value depends on the machine, so it is worth timing a few values, starting with about half of the available cores. The variables must be set before NumPy or JAX is imported, either in the shell:
 
 .. code-block:: bash
 

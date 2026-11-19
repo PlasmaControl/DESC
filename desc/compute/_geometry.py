@@ -603,7 +603,7 @@ def _perimeter_of_z_flux_surface(params, transforms, profiles, data, **kwargs):
         line_label="theta",
         fix_surface=("x0", max_rho),
         expand_out=True,
-    ) / jnp.where(max_rho == 0, 1, max_rho)
+    )
     return data
 
 

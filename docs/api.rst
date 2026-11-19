@@ -235,6 +235,7 @@ Objective Functions
     desc.objectives.FixCurrent
     desc.objectives.FixElectronDensity
     desc.objectives.FixElectronTemperature
+    desc.objectives.FixIonDensity
     desc.objectives.FixIonTemperature
     desc.objectives.FixIota
     desc.objectives.FixModeR

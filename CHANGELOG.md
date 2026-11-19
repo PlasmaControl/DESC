@@ -1,6 +1,14 @@
 Changelog
 =========
 
+Performance Improvements
+
+- Speeds up ``Equilibrium.map_coordinates`` from ``(rho, alpha, zeta)`` and ``(rho, theta_PEST, zeta)`` by summing lambda over its radial and toroidal modes once per point.
+
+
+v0.17.4
+-------
+
 New Features
 
 - Adds ``desc.external.agni.AgniStability``, the squared growth rate of the most unstable finite-n ideal MHD mode computed by the external AGNI solver (``pip install agnimhd``), with its gradient for optimization.

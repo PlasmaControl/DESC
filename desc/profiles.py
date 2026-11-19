@@ -235,7 +235,7 @@ class _Profile(IOAble, ABC):
         if jnp.isscalar(x):
             copy = self.copy()
             if isinstance(self, ScaledProfile):
-                copy.params = copy.params[0] * x
+                copy.params = copy.params[0] * x  # equivalent to copy._scale *= x
                 return copy
             if (
                 isinstance(self, PowerSeriesProfile)
@@ -246,7 +246,7 @@ class _Profile(IOAble, ABC):
                 copy.params *= x
                 return copy
             if isinstance(self, TwoPowerProfile):
-                copy.params *= np.array([x, 1, 1])
+                copy.params *= np.array([x, 1, 1])  # params = [scale, 1st pow, 2nd pow]
                 return copy
             return ScaledProfile(x, self)
         elif isinstance(x, _Profile):
@@ -278,7 +278,7 @@ class _Profile(IOAble, ABC):
         if jnp.isscalar(x):
             copy = self.copy()
             if isinstance(self, PowerProfile):
-                copy.params = copy.params[0] * x
+                copy.params = copy.params[0] * x  # equivalent to copy._power *= x
                 return copy
             return PowerProfile(x, self)
         else:

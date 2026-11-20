@@ -66,8 +66,15 @@ WEIGHTS = {
 TERM_NAMES = ["quadratic flux", "coil-coil dist", "plasma-coil dist", "curvature", "length"]
 
 
-def setup(num_coils=3, r_over_a=3.0, N=10):
-    """Return (eq, coilset, objective, constraints) as in the DESC tutorial."""
+def setup(num_coils=3, r_over_a=3.0, N=10, variant="tutorial"):
+    """Return (eq, coilset, objective, constraints) as in the DESC tutorial.
+
+    ``variant="tight"`` replaces the tutorial's loose coil-coil distance and length
+    bounds by the values the tutorial's own result has (coil-coil distance >= 0.14 m,
+    every coil <= 7 m long), so better minima cannot come from longer coils or coils
+    packed closer together; the tutorial result stays feasible.
+    """
+    tight = variant == "tight"
     eq = desc.examples.get("precise_QA")
     coilset = initialize_modular_coils(eq, num_coils=num_coils, r_over_a=r_over_a)
     coilset = coilset.to_FourierXYZ(N=N)
@@ -86,8 +93,8 @@ def setup(num_coils=3, r_over_a=3.0, N=10):
             ),
             CoilSetMinDistance(
                 coilset,
-                bounds=(0.1, np.inf),
-                normalize_target=False,
+                bounds=(0.14, np.inf) if tight else (0.1, np.inf),
+                normalize_target=tight,  # tight bound is in meters
                 grid=coil_grid,
                 weight=w["coil-coil min dist"],
             ),
@@ -110,7 +117,9 @@ def setup(num_coils=3, r_over_a=3.0, N=10):
             ),
             CoilLength(
                 coilset,
-                bounds=(0, 2 * np.pi * (coilset[0].compute("length")["length"])),
+                bounds=(0, 7.0)
+                if tight
+                else (0, 2 * np.pi * (coilset[0].compute("length")["length"])),
                 normalize_target=True,
                 grid=coil_grid,
                 weight=w["coil length"],
@@ -172,13 +181,16 @@ def main():
         default=None,
         help="cma only: search only coil Fourier modes |n| <= max-order",
     )
+    p.add_argument("--variant", default="tutorial", choices=["tutorial", "tight"])
     p.add_argument("--tag", default="")
     p.add_argument("--smoke", action="store_true", help="tiny budgets for testing")
     args = p.parse_args()
 
     os.makedirs(OUTDIR, exist_ok=True)
     t0 = time.time()
-    eq, coilset, obj, cons = setup()
+    eq, coilset, obj, cons = setup(variant=args.variant)
+    if args.variant != "tutorial" and not args.tag:
+        args.tag = "_" + args.variant
     problem = ProjectedProblem(
         coilset,
         obj,
@@ -257,6 +269,7 @@ def main():
     summary = dict(
         method=m,
         tag=args.tag,
+        variant=args.variant,
         seed=args.seed,
         sigma=args.sigma,
         length_scale=args.length_scale,

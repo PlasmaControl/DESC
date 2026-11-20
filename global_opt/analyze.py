@@ -392,6 +392,7 @@ def main():
                 "Stage one (precise QA boundary, M = N = 6): best cost vs. time",
                 keys=keys,
                 base_label="example result",
+                legend_loc="upper right",
             )
             plot_minima(
                 r1,

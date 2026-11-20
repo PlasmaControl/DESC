@@ -73,6 +73,10 @@ def _compare_against_master(
 def _xyz_to_rpz(data, name):
     if name in ["x", "center"]:
         res = xyz2rpz(data[name])
+    elif data[name].ndim == 3:  # rank 2 tensor, rotate both indices
+        phi = data["phi"][:, np.newaxis]
+        res = xyz2rpz_vec(data[name], phi=phi)
+        res = np.swapaxes(xyz2rpz_vec(np.swapaxes(res, -1, -2), phi=phi), -1, -2)
     else:
         res = xyz2rpz_vec(data[name], phi=data["phi"])
     return res
@@ -80,19 +84,20 @@ def _xyz_to_rpz(data, name):
 
 def _compare_against_rpz(p, data, data_rpz, coordinate_conversion_func):
     for name in data:
-        if data_index[p][name]["dim"] != 3:
+        if data_index[p][name]["dim"] not in (3, (3, 3)):
             continue
         res = coordinate_conversion_func(data, name) - data_rpz[name]
         rtol = 1e-4 if "Gamma_" in name and OLD_FINUFFT else 1e-8
         atol = 1e-8
+        if data_index[p][name]["dim"] == 3:
+            # the phi component of a position can differ by 2π
+            wrapped = np.isclose(np.abs(res[:, 1]), 2 * np.pi, rtol=rtol, atol=atol)
+            wrapped = wrapped[:, np.newaxis]
+        else:
+            wrapped = False
         errorif(
             not np.all(
-                (
-                    np.isclose(res, 0, rtol=rtol, atol=atol)
-                    | np.isclose(np.abs(res[:, 1]), 2 * np.pi, rtol=rtol, atol=atol)[
-                        :, np.newaxis
-                    ]
-                )
+                (np.isclose(res, 0, rtol=rtol, atol=atol) | wrapped)
                 | (~np.isfinite(data_rpz[name]))
             ),
             AssertionError,
@@ -286,20 +291,12 @@ def test_compute_everything():
             # test compute in XYZ basis
             if p in no_xyz_things:
                 continue
-            # remove quantities that are not implemented in the XYZ basis
-            # TODO (#1110): generalize this instead of hard-coding for
-            #  the quantities "grad(B)" & dependencies
-            names_xyz = (
-                names - {"grad(B)", "|grad(B)|", "L_grad(B)"}
-                if "grad(B)" in names
-                else names
-            )
             this_branch_data_xyz = things[p].compute(
-                list(names_xyz), **grid.get(p, {}), basis="xyz"
+                list(names), **grid.get(p, {}), basis="xyz"
             )
-            assert this_branch_data_xyz.keys() == names_xyz, (
+            assert this_branch_data_xyz.keys() == names, (
                 f"Parameterization: {p}. Can't compute "
-                + f"{names_xyz - this_branch_data_xyz.keys()}."
+                + f"{names - this_branch_data_xyz.keys()}."
             )
             _compare_against_rpz(
                 p, this_branch_data_xyz, this_branch_data_rpz[p], _xyz_to_rpz

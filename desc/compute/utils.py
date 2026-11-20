@@ -147,16 +147,17 @@ def compute(  # noqa: C901
     # convert data from default 'rpz' basis to 'xyz' basis, if requested by the user
     if basis == "xyz":
         for name in data.keys():
-            errorif(
-                data_index[p][name]["dim"] == (3, 3),
-                NotImplementedError,
-                "Tensor quantities cannot be converted to Cartesian coordinates.",
-            )
-            if data_index[p][name]["dim"] == 3:  # only convert vector data
+            if data_index[p][name]["dim"] == 3:  # vector data
                 if name in ["x", "center"]:
                     data[name] = rpz2xyz(data[name])
                 else:
                     data[name] = rpz2xyz_vec(data[name], phi=data["phi"])
+            elif data_index[p][name]["dim"] == (3, 3):  # rank 2 tensor data
+                # T_xyz = Q T_rpz Q^T: rotate the second index, then the first
+                phi = data["phi"][:, jnp.newaxis]
+                tensor = rpz2xyz_vec(data[name], phi=phi)
+                tensor = rpz2xyz_vec(jnp.swapaxes(tensor, -1, -2), phi=phi)
+                data[name] = jnp.swapaxes(tensor, -1, -2)
 
     return data
 

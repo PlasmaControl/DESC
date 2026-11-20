@@ -449,14 +449,11 @@ def get_params(keys, obj, has_axis=False, basis="rpz"):
 def _transform_method(jitable, method=None):
     """The ``Transform`` method ``get_transforms`` builds with.
 
-    An explicit method from the caller wins (e.g. ``method="pest"``); previously only
-    ``"jitable"`` was honored and anything else was silently replaced by ``"auto"``.
-    ``None`` or ``"auto"`` means decide per transform; ``jitable=True`` means
-    ``"jitable"`` unless another method was asked for explicitly.
+    Uses input method if provided; otherwise defaults to auto.
     """
-    if method is not None and method not in ("auto", "jitable"):
+    if method is not None and method != "auto":
         return method
-    return "jitable" if (jitable or method == "jitable") else "auto"
+    return "jitable" if jitable else "auto"
 
 
 @execute_on_cpu

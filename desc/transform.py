@@ -143,10 +143,7 @@ class Transform(IOAble):
             derivatives = np.atleast_2d(derivs)
         else:
             raise NotImplementedError(
-                colored(
-                    "derivs should be array-like with 3 columns, or a non-negative int",
-                    "red",
-                )
+                "derivs should be array-like with 3 columns, or a non-negative int"
             )
         # always include the 0,0,0 derivative
         if not (np.array([0, 0, 0]) == derivatives).all(axis=-1).any():
@@ -206,11 +203,8 @@ class Transform(IOAble):
 
         if not grid.fft_toroidal:
             warnings.warn(
-                colored(
-                    "fft method requires compatible grid, got {}".format(grid)
-                    + "falling back to direct2 method",
-                    "yellow",
-                )
+                "fft method requires compatible grid, got {}".format(grid)
+                + "falling back to direct2 method",
             )
             self.method = "direct2"
             return
@@ -285,11 +279,8 @@ class Transform(IOAble):
 
         if not basis.fft_toroidal:  # same basis requirement as fft/direct2
             warnings.warn(
-                colored(
-                    "pest method requires compatible basis, got {}".format(basis)
-                    + "falling back to direct1 method",
-                    "yellow",
-                )
+                "pest method requires compatible basis, got {}".format(basis)
+                + "falling back to direct1 method",
             )
             self.method = "direct1"
             return
@@ -298,12 +289,9 @@ class Transform(IOAble):
             unique_zeta_idx = grid.unique_zeta_idx
         except AttributeError:
             warnings.warn(
-                colored(
-                    "pest method requires the grid to carry zeta unique/inverse "
-                    + "indices, got {}".format(grid)
-                    + "falling back to direct1 method",
-                    "yellow",
-                )
+                "pest method requires the grid to carry zeta unique/inverse "
+                + "indices, got {}".format(grid)
+                + "falling back to direct1 method",
             )
             self.method = "direct1"
             return
@@ -507,17 +495,14 @@ class Transform(IOAble):
         elif self.method == "pest" and not self._pest_separable_fit():
             # Use full pinv
             warnings.warn(
-                colored(
-                    "pest method: the per-plane fit is not exact for this grid ("
-                    + (
-                        "unequal or traced number of nodes per zeta plane"
-                        if self.pest_plane_idx is None
-                        else f"{self.grid.num_zeta} zeta planes > "
-                        f"{self.num_n_modes} toroidal modes"
-                    )
-                    + "), falling back to the full pseudoinverse of direct1 for fit",
-                    "yellow",
+                "pest method: the per-plane fit is not exact for this grid ("
+                + (
+                    "unequal or traced number of nodes per zeta plane"
+                    if self.pest_plane_idx is None
+                    else f"{self.grid.num_zeta} zeta planes > "
+                    f"{self.num_n_modes} toroidal modes"
                 )
+                + "), falling back to the full pseudoinverse of direct1 for fit",
             )
             A = self.basis.evaluate(self.grid, np.array([0, 0, 0]))
             self.matrices["pinv"] = (

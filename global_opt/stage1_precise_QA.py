@@ -205,15 +205,42 @@ def main():
     scales = boundary_scales(eq0, args.length_scale, 0.5, args.kmax)
     trace, minima = [], []
     best_eq, best = None, np.inf
+    tag = f"{args.method}{args.tag}_M{args.M}_k{args.kmax}_seed{args.seed}"
+
+    def save(save_eq):
+        """Write the summary (and the best eq): a checkpoint after every improvement."""
+        summary = dict(
+            method=args.method,
+            tag=args.tag,
+            init=args.init,
+            seed=args.seed,
+            M=args.M,
+            kmax=args.kmax,
+            maxiter=args.maxiter,
+            sigma=args.sigma,
+            length_scale=args.length_scale,
+            budget=args.budget,
+            wall_time=time.time() - t0,
+            best=evaluate(best_eq),
+            local_minima=minima,
+            trace=trace,
+        )
+        with open(os.path.join(OUTDIR, f"{tag}.json"), "w") as f:
+            json.dump(summary, f, indent=1)
+        if save_eq:
+            best_eq.save(os.path.join(OUTDIR, f"{tag}_eq.h5"))
+        return summary["best"]
 
     def record(eq, label):
         nonlocal best_eq, best
         c = evaluate(eq)["cost"]
         minima.append(c)
-        if c < best:
+        improved = c < best
+        if improved:
             best_eq, best = eq, c
         trace.append(dict(time=time.time() - t0, best_cost=best, cost=c, label=label))
         log(f"{label}: cost {c:.4e}  best {best:.4e}")
+        save(improved)
         return c
 
     if args.method == "baseline":
@@ -258,27 +285,7 @@ def main():
             if minima and c_cur > best and k % 6 == 0:  # restart walker from best
                 eq_cur, c_cur = best_eq, best
 
-    final = evaluate(best_eq)
-    summary = dict(
-        method=args.method,
-        tag=args.tag,
-        init=args.init,
-        seed=args.seed,
-        M=args.M,
-        kmax=args.kmax,
-        maxiter=args.maxiter,
-        sigma=args.sigma,
-        length_scale=args.length_scale,
-        budget=args.budget,
-        wall_time=time.time() - t0,
-        best=final,
-        local_minima=minima,
-        trace=trace,
-    )
-    tag = f"{args.method}{args.tag}_M{args.M}_k{args.kmax}_seed{args.seed}"
-    with open(os.path.join(OUTDIR, f"{tag}.json"), "w") as f:
-        json.dump(summary, f, indent=1)
-    best_eq.save(os.path.join(OUTDIR, f"{tag}_eq.h5"))
+    final = save(True)
     log(json.dumps(final))
 
 

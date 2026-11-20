@@ -186,6 +186,12 @@ def main():
     p.add_argument("--sigma", type=float, default=1.0)
     p.add_argument("--length-scale", type=float, default=0.02)
     p.add_argument("--temperature", type=float, default=0.5)
+    p.add_argument(
+        "--init",
+        default=None,
+        help="basin hopping only: start from this saved (already optimized) eq",
+    )
+    p.add_argument("--tag", default="")
     args = p.parse_args()
     os.makedirs(OUTDIR, exist_ok=True)
     rng = np.random.default_rng(args.seed)
@@ -225,7 +231,10 @@ def main():
             i += 1
     elif args.method == "basin":
         sigma = args.sigma
-        eq_cur = continuation(eq0, args.kmax, args.maxiter)
+        if args.init is not None:
+            eq_cur = load(args.init)
+        else:
+            eq_cur = continuation(eq0, args.kmax, args.maxiter)
         c_cur = record(eq_cur, "hop 0")
         k, n_acc = 0, 0
         while time.time() - t0 < args.budget:
@@ -264,7 +273,7 @@ def main():
         local_minima=minima,
         trace=trace,
     )
-    tag = f"{args.method}_M{args.M}_k{args.kmax}_seed{args.seed}"
+    tag = f"{args.method}{args.tag}_M{args.M}_k{args.kmax}_seed{args.seed}"
     with open(os.path.join(OUTDIR, f"{tag}.json"), "w") as f:
         json.dump(summary, f, indent=1)
     best_eq.save(os.path.join(OUTDIR, f"{tag}_eq.h5"))

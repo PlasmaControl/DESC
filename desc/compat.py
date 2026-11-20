@@ -12,6 +12,7 @@ __all__ = [
     "contract_equilibrium",
     "ensure_positive_jacobian",
     "flip_helicity",
+    "flip_magnetic_field",
     "flip_theta",
     "rescale",
     "rotate_zeta",
@@ -52,9 +53,9 @@ def ensure_positive_jacobian(eq):
         )
 
         if eq.iota is not None:
-            eq.i_l *= -1
+            eq.iota *= -1
         else:
-            eq.c_l *= -1
+            eq.current *= -1
 
         rone = np.ones_like(eq.R_lmn)
         rone[eq.R_basis.modes[:, 1] < 0] *= -1
@@ -98,10 +99,17 @@ def flip_helicity(eq):
             flip_helicity(e)
         return eq
 
+    warnif(
+        hasattr(eq.surface, "Phi_mn"),
+        UserWarning,
+        "The Equilibrium has a sheet current, "
+        "which may not be handled correctly by flip_helicity.",
+    )
+
     if eq.iota is not None:
-        eq.i_l *= -1
+        eq.iota *= -1
     else:
-        eq.c_l *= -1
+        eq.current *= -1
 
     rone = np.ones_like(eq.R_lmn)
     rone[eq.R_basis.modes[:, 2] < 0] *= -1
@@ -117,6 +125,41 @@ def flip_helicity(eq):
 
     eq.axis = eq.get_axis()
     eq.surface = eq.get_surface_at(rho=1)
+
+    return eq
+
+
+def flip_magnetic_field(eq):
+    """Reverse the direction of the magnetic field.
+
+    Parameters
+    ----------
+    eq : Equilibrium or iterable of Equilibrium
+        Equilibria to flip the magnetic field of.
+
+    Returns
+    -------
+    eq : Equilibrium or iterable of Equilibrium
+        Same as input, but with the reverse direction magnetic field.
+
+    """
+    # maybe it's iterable:
+    if hasattr(eq, "__len__"):
+        for e in eq:
+            flip_magnetic_field(e)
+        return eq
+
+    warnif(
+        hasattr(eq.surface, "Phi_mn"),
+        UserWarning,
+        "The Equilibrium has a sheet current, "
+        "which may not be handled correctly by flip_magnetic_field.",
+    )
+
+    eq.Psi *= -1
+
+    if eq.current is not None:
+        eq.current *= -1
 
     return eq
 
@@ -142,6 +185,13 @@ def flip_theta(eq):
         for e in eq:
             flip_theta(e)
         return eq
+
+    warnif(
+        hasattr(eq.surface, "Phi_mn"),
+        UserWarning,
+        "The Equilibrium has a sheet current, "
+        "which may not be handled correctly by flip_theta.",
+    )
 
     rone = np.ones_like(eq.R_lmn)
     rone[eq.R_basis.modes[:, 1] % 2 == 1] *= -1
@@ -200,6 +250,13 @@ def rescale(
         for e in eq:
             rescale(e, L, B)
         return eq
+
+    warnif(
+        hasattr(eq.surface, "Phi_mn"),
+        UserWarning,
+        "The Equilibrium has a sheet current, "
+        "which may not be handled correctly by rescale.",
+    )
 
     assert len(L) == 2
     assert len(B) == 2
@@ -298,7 +355,15 @@ def rotate_zeta(eq, angle, copy=False):
     -------
     eq_rotated : Equilibrium
         Equilibrium rotated about the toroidal direction
+
     """
+    warnif(
+        hasattr(eq.surface, "Phi_mn"),
+        UserWarning,
+        "The Equilibrium has a sheet current, "
+        "which may not be handled correctly by rotate_zeta.",
+    )
+
     eq_rotated = eq.copy() if copy else eq
     # We will apply the rotation in NFP domain
     angle = angle * eq.NFP
@@ -390,6 +455,13 @@ def contract_equilibrium(
         ValueError,
         f"Surface must be in the range 0 < inner_rho < 1, instead got {inner_rho}.",
     )
+    warnif(
+        hasattr(eq.surface, "Phi_mn"),
+        UserWarning,
+        "The Equilibrium has a sheet current, "
+        "which may not be handled correctly by contract_equilibrium.",
+    )
+
     profile_num_points = setdefault(profile_num_points, eq.L_grid)
 
     def scale_profile(profile, rho):

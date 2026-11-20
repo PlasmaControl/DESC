@@ -1,9 +1,19 @@
 Changelog
 =========
 
+New Features
+
+- Adds `desc.compat.flip_magnetic_field` compatibility function to reverse the direction of an Equilibrium magnetic field.
+
+Breaking Changes and Deprecations
+
+- When multiplying a profile by a scalar, it now returns a new profile of the same class type with updated parameters if possible. The old code would always convert other profile types to a ``ScaledProfile`` or update the scale parameter of the original profile instance.
+
 Bug Fixes
 
 - Fixes ``perturb`` with NumPy array weights and with 2D weight matrices.
+- Fixes how profiles are updated in ``desc.compat`` functions to work with all profile types.
+- Casts ``MTanhProfile`` params input to an array.
 
 
 v0.17.4
@@ -42,7 +52,6 @@ Breaking Changes and Deprecations
 - ``rotation_matrix`` utility function now accepts either an axis and an angle as arguments (previous behavior), OR a vector and a vector. In the latter case, the rotation matrix returned will rotate the first vector onto the second, using quaternions which avoids the NaN gradient issue that the axis-angle form can have at vertical normals. Note that these are positional arguments, and the kwargs ``axis`` and ``angle`` are now deprecated.
 - Public modules now define ``__all__`` matching the API documentation, which makes the public API explicit for IDEs, type checkers and other tools. Note that ``from desc.<module> import *`` now only imports the documented public names.
 
-
 Bug Fixes
 
 - Fixes 2nd and 3rd order terms of ``perturb`` (and so of ``Equilibrium.perturb``, ``solve_continuation`` and ``ProximalProjection``) being evaluated along a tangent that included the full value of any fixed parameter of magnitude above 100 (eg pressure, density, temperature or current profiles in SI units), which made the higher order terms worse than no correction. Note that this did not make old results incorrect, rather it just made the optimizations inefficient
@@ -58,15 +67,8 @@ Bug Fixes
 - Fixes potential scaling-based issue in DESC-based optimization methods which use adaptive Hessian scaling (e.g. ``"fmintr"``) that could occur when the problem size was small and there were directions of near-zero derivative in the problem.
 - Fixes computation of ``CoilSetLinkingNumber`` to exclude coil writhe.
 - Adjusts the `quad_weights` of coil objectives of type `_broadcast_input = "node"` to ensure their outputs are roughly independent of grid resolution.
-- Fixes bug in modified Cholesky factorization used by the trust-region
-  subproblems when the Gershgorin lower bound of the Hessian was exactly zero
-  (e.g. a Hessian with an all-zero row), producing NaN steps in ``fmintr`` and
-  ``fmin-auglag`` with the default ``tr_method="exact"``, and in
-  ``lsq-exact``/``lsq-auglag`` with ``tr_method="cho"``.
-- Fixes the Levenberg-Marquardt parameter update in the Cholesky trust-region
-  subproblem, which often failed to converge and returned inexact steps in
-  ``fmintr`` and ``fmin-auglag`` with the default ``tr_method="exact"``, and in
-  ``lsq-exact``/``lsq-auglag`` with ``tr_method="cho"``.
+- Fixes bug in modified Cholesky factorization used by the trust-region subproblems when the Gershgorin lower bound of the Hessian was exactly zero (e.g. a Hessian with an all-zero row), producing NaN steps in ``fmintr`` and ``fmin-auglag`` with the default ``tr_method="exact"``, and in ``lsq-exact``/``lsq-auglag`` with ``tr_method="cho"``.
+- Fixes the Levenberg-Marquardt parameter update in the Cholesky trust-region subproblem, which often failed to converge and returned inexact steps in ``fmintr`` and ``fmin-auglag`` with the default ``tr_method="exact"``, and in ``lsq-exact``/``lsq-auglag`` with ``tr_method="cho"``.
 - Stops `ProximalProjection` from mutating `solve_options` during iterations.
 - Fixes ``FourierRZCoil``, ``SplineXYZCoil`` and other coils' ``compute_magnetic_field`` and ``compute_magnetic_vector_potential`` removing ``current`` from the caller's ``params`` dictionary when it was used to override the coil current, which made repeated calls with the same ``params`` silently use the coil's stored current instead.
 - Fixed bug that occured when passing in ``_surf_batch_size`` kwarg to ``Omnigenity`` and ``QuasisymmetryBoozer`` objectives

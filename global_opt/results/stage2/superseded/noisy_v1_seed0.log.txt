@@ -1,0 +1,119 @@
+ProjectedProblem built in 1.3s: dim x = 228, dim z = 227, dim f = 1656, perturbed entries = 192
+/home/user/plasmacontrol/desc/desc/utils.py:665: FutureWarning: constants is deprecated and will be removed in a future release. Users should not include constants in the arguments of their objective compute methods. Instead declare all the constants in the build method and use as self._constants.
+  warnings.warn(msg, err)
+/home/user/plasmacontrol/desc/desc/utils.py:665: FutureWarning: constants is deprecated and will be removed in a future release. Users should not include constants in the arguments of their objective compute methods. Instead declare all the constants in the build method and use as obj._constants.
+  warnings.warn(msg, err)
+/home/user/plasmacontrol/desc/desc/utils.py:665: FutureWarning: constants is deprecated and will be removed in a future release. Users should not include constants in the arguments of their objective compute methods. Instead declare all the constants in the build method and use as self._constants.
+  warnings.warn(msg, err)
+/home/user/plasmacontrol/desc/desc/utils.py:665: FutureWarning: constants is deprecated and will be removed in a future release. Users should not include constants in the arguments of their objective compute methods. Instead declare all the constants in the build method and use as self._constants.
+  warnings.warn(msg, err)
+/home/user/plasmacontrol/desc/desc/utils.py:665: FutureWarning: constants is deprecated and will be removed in a future release. Users should not include constants in the arguments of their objective compute methods. Instead declare all the constants in the build method and use as self._constants.
+  warnings.warn(msg, err)
+/home/user/plasmacontrol/desc/desc/utils.py:665: FutureWarning: constants is deprecated and will be removed in a future release. Users should not include constants in the arguments of their objective compute methods. Instead declare all the constants in the build method and use as self._constants.
+  warnings.warn(msg, err)
+/home/user/plasmacontrol/desc/desc/utils.py:665: FutureWarning: constants is deprecated and will be removed in a future release. Users should not include constants in the arguments of their objective compute methods. Instead declare all the constants in the build method and use as self._constants.
+  warnings.warn(msg, err)
+initial cost 4.5158e+06
+[noisy-grad] cycle 0 step    0: cost 4.5158e+06 noise 0.300 best 4.5158e+06
+[noisy-grad] cycle 0 step  100: cost 6.0492e+06 noise 0.298 best 2.6961e+06
+[noisy-grad] cycle 0 step  200: cost 4.0698e+06 noise 0.295 best 2.6961e+06
+[noisy-grad] cycle 0 step  300: cost 1.8803e+06 noise 0.293 best 1.3771e+06
+[noisy-grad] cycle 0 step  400: cost 2.3926e+06 noise 0.290 best 1.3771e+06
+[noisy-grad] cycle 0 step  500: cost 1.8407e+06 noise 0.288 best 1.3771e+06
+[noisy-grad] cycle 0 step  600: cost 2.7655e+06 noise 0.286 best 1.3771e+06
+[noisy-grad] cycle 0 step  700: cost 2.3942e+06 noise 0.283 best 1.3771e+06
+[noisy-grad] cycle 0 step  800: cost 4.1210e+06 noise 0.281 best 1.3771e+06
+[noisy-grad] cycle 0 step  900: cost 1.9642e+06 noise 0.279 best 1.3771e+06
+[noisy-grad] cycle 0 step 1000: cost 3.7981e+06 noise 0.276 best 1.3771e+06
+[noisy-grad] cycle 0 step 1100: cost 1.9561e+06 noise 0.274 best 1.3771e+06
+[noisy-grad] cycle 0 step 1200: cost 1.8867e+06 noise 0.272 best 1.3771e+06
+[noisy-grad] cycle 0 step 1300: cost 2.3525e+06 noise 0.270 best 1.1003e+06
+[noisy-grad] cycle 0 step 1400: cost 4.7089e+06 noise 0.267 best 1.1003e+06
+[noisy-grad] cycle 0 step 1500: cost 1.8844e+06 noise 0.265 best 1.1003e+06
+[noisy-grad] cycle 0 step 1600: cost 2.4588e+06 noise 0.263 best 1.1003e+06
+[noisy-grad] cycle 0 step 1700: cost 1.5564e+06 noise 0.261 best 1.1003e+06
+[noisy-grad] cycle 0 step 1800: cost 1.9484e+06 noise 0.258 best 1.0415e+06
+[noisy-grad] cycle 0 step 1900: cost 1.4431e+06 noise 0.256 best 8.6567e+05
+[noisy-grad] cycle 0 step 2000: cost 3.5015e+06 noise 0.254 best 8.6567e+05
+[noisy-grad] cycle 0 step 2100: cost 9.9595e+06 noise 0.252 best 8.6567e+05
+[noisy-grad] cycle 0 step 2200: cost 2.0923e+06 noise 0.250 best 8.6567e+05
+[noisy-grad] cycle 0 step 2300: cost 4.8212e+06 noise 0.247 best 8.6567e+05
+[noisy-grad] cycle 0 step 2400: cost 2.9261e+06 noise 0.245 best 8.6567e+05
+[noisy-grad] cycle 0 step 2500: cost 2.3729e+06 noise 0.243 best 8.6567e+05
+[noisy-grad] cycle 0 step 2600: cost 1.0536e+06 noise 0.241 best 8.6567e+05
+[noisy-grad] cycle 0 step 2700: cost 9.8322e+05 noise 0.239 best 8.6567e+05
+[noisy-grad] cycle 0 step 2800: cost 4.8576e+06 noise 0.237 best 8.6567e+05
+[noisy-grad] cycle 0 step 2900: cost 2.3054e+06 noise 0.234 best 8.6567e+05
+[noisy-grad] cycle 0 step 3000: cost 2.5973e+06 noise 0.232 best 8.6567e+05
+[noisy-grad] cycle 0 step 3100: cost 2.7213e+06 noise 0.230 best 8.6567e+05
+[noisy-grad] cycle 0 step 3200: cost 2.9315e+06 noise 0.228 best 8.6567e+05
+[noisy-grad] cycle 0 step 3300: cost 4.4526e+06 noise 0.226 best 8.6567e+05
+[noisy-grad] cycle 0 step 3400: cost 1.8003e+06 noise 0.224 best 8.6567e+05
+[noisy-grad] cycle 0 step 3500: cost 3.5579e+06 noise 0.222 best 8.6567e+05
+[noisy-grad] cycle 0 step 3600: cost 1.1236e+07 noise 0.220 best 8.6567e+05
+[noisy-grad] cycle 0 step 3700: cost 3.5633e+06 noise 0.218 best 8.6567e+05
+[noisy-grad] cycle 0 step 3800: cost 2.3990e+06 noise 0.216 best 8.6567e+05
+[noisy-grad] cycle 0 step 3900: cost 1.7942e+06 noise 0.214 best 8.6567e+05
+[noisy-grad] cycle 0 step 4000: cost 2.2797e+06 noise 0.212 best 8.6567e+05
+[noisy-grad] cycle 0 step 4100: cost 3.0285e+06 noise 0.210 best 8.6567e+05
+[noisy-grad] cycle 0 step 4200: cost 4.7105e+06 noise 0.208 best 8.6567e+05
+[noisy-grad] cycle 0 step 4300: cost 2.2371e+06 noise 0.206 best 8.6567e+05
+[noisy-grad] cycle 0 step 4400: cost 2.9218e+06 noise 0.204 best 8.6567e+05
+[noisy-grad] cycle 0 step 4500: cost 5.3928e+06 noise 0.202 best 8.6567e+05
+[noisy-grad] cycle 0 step 4600: cost 3.4343e+06 noise 0.200 best 8.6567e+05
+[noisy-grad] cycle 0 step 4700: cost 2.9032e+06 noise 0.198 best 8.6567e+05
+[noisy-grad] cycle 0 step 4800: cost 7.3994e+06 noise 0.196 best 8.6567e+05
+[noisy-grad] cycle 0 step 4900: cost 3.9049e+06 noise 0.194 best 8.6567e+05
+[noisy-grad] cycle 0 step 5000: cost 1.3677e+06 noise 0.192 best 8.6567e+05
+[noisy-grad] cycle 0 step 5100: cost 3.1937e+07 noise 0.190 best 8.6567e+05
+[noisy-grad] cycle 0 step 5200: cost 2.2170e+06 noise 0.188 best 8.6567e+05
+[noisy-grad] cycle 0 step 5300: cost 1.5896e+06 noise 0.186 best 8.6567e+05
+[noisy-grad] cycle 0 step 5400: cost 2.3403e+06 noise 0.184 best 8.6567e+05
+[noisy-grad] cycle 0 step 5500: cost 3.9624e+06 noise 0.183 best 8.6567e+05
+[noisy-grad] polish 0: raw 8.6567e+05 -> 2.0803e+02
+[noisy-grad] polish 1: raw inf -> 2.0803e+02
+[noisy-grad] polish 2: raw inf -> 2.0803e+02
+/home/user/plasmacontrol/desc/desc/utils.py:665: FutureWarning: constants is deprecated and will be removed in a future release. Users should not include constants in the arguments of their objective compute methods. Instead declare all the constants in the build method and use as self._constants.
+  warnings.warn(msg, err)
+{
+ "method": "noisy",
+ "seed": 0,
+ "sigma": 1.0,
+ "length_scale": 0.05,
+ "budget": 1200.0,
+ "wall_time": 969.5057263374329,
+ "n_local_solves": 3,
+ "nfev": 5652,
+ "ngev": 5608,
+ "best_cost": 208.03037240318594,
+ "metrics": {
+  "cost": 208.03037240318594,
+  "terms": {
+   "quadratic flux": 147.81182559136488,
+   "coil-coil dist": 0.016252742314831644,
+   "plasma-coil dist": 0.0,
+   "curvature": 60.2022940695062,
+   "length": 0.0
+  },
+  "Bn_over_B": 0.002447788034846282,
+  "min_coil_coil_dist": 0.05122938990430548,
+  "min_plasma_coil_dist": 0.40882942527178523,
+  "max_curvature_normalized": 2.0560454134357515,
+  "min_curvature_normalized": -1.1233668728529522,
+  "coil_lengths": [
+   15.207616740096434,
+   13.467922809261985,
+   11.807306537677723
+  ],
+  "currents": [
+   453485.2413310118,
+   -276938.15112263913,
+   96632.8875885523
+  ]
+ },
+ "local_minima": [
+  208.03037240318594,
+  208.03037240318594,
+  208.03037240318594
+ ]
+}

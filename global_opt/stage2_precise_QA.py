@@ -166,6 +166,12 @@ def main():
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--sigma", type=float, default=1.0)
     p.add_argument("--length-scale", type=float, default=0.05, help="meters")
+    p.add_argument(
+        "--max-order",
+        type=int,
+        default=None,
+        help="cma only: search only coil Fourier modes |n| <= max-order",
+    )
     p.add_argument("--tag", default="")
     p.add_argument("--smoke", action="store_true", help="tiny budgets for testing")
     args = p.parse_args()
@@ -225,6 +231,7 @@ def main():
             sigma0=args.sigma,
             x0=res0["x"],
             seed=args.seed,
+            max_order=args.max_order,
             max_evals=200 if smoke else 10**6,
             n_polish=1 if smoke else 3,
             time_budget=30 if smoke else max(args.budget - 300, 60),
@@ -232,20 +239,24 @@ def main():
         if res0["cost"] < result["cost"]:
             result["x"], result["cost"] = res0["x"], res0["cost"]
     elif m == "noisy":
+        # like CMA-ES, start the Langevin excursions from the first local minimum
+        res0 = problem.local_solve(x0)
+        print(f"first local minimum: {res0['cost']:.4e}")
         result = annealed_noisy_gradient(
             problem,
-            n_steps=20 if smoke else 100000,
-            n_cycles=1 if smoke else 4,
-            noise0=0.3 * args.sigma,
-            x0=x0,
+            n_cycles=1 if smoke else 1000,
+            steps_per_cycle=20 if smoke else 200,
+            temperature0=0.3 * args.sigma**2,
+            x0=res0["x"],
             seed=args.seed,
-            n_polish=1 if smoke else 3,
-            time_budget=30 if smoke else max(args.budget - 300, 60),
+            time_budget=30 if smoke else args.budget - res0["time"],
         )
+        result["history"].insert(0, dict(cost=res0["cost"], x=res0["x"]))
     met = metrics(problem, eq, coilset, result["x"])
     tag = f"{m}{args.tag}_seed{args.seed}" + ("_smoke" if smoke else "")
     summary = dict(
         method=m,
+        tag=args.tag,
         seed=args.seed,
         sigma=args.sigma,
         length_scale=args.length_scale,

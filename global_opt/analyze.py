@@ -27,6 +27,7 @@ COLORS = {
     "basin": "#eb6834",
     "noisy": "#1baf7a",
     "cma": "#eda100",
+    "cma_lowmode": "#e87ba4",
 }
 BASELINE_COLOR = "#7a7974"
 LABELS = {
@@ -36,8 +37,10 @@ LABELS = {
     "basin": "Basin hopping",
     "noisy": "Annealed noisy gradient",
     "cma": "CMA-ES + polish",
+    "cma_lowmode": "CMA-ES (|n|<=2 subspace) + polish",
 }
-ORDER = ["baseline", "converged", "multistart", "basin", "noisy", "cma"]
+ORDER = ["baseline", "converged", "multistart", "basin", "noisy", "cma", "cma_lowmode"]
+GLOBAL = ["multistart", "basin", "noisy", "cma", "cma_lowmode"]
 
 
 def _style(ax):
@@ -56,7 +59,7 @@ def load(stage):
         d = json.load(open(f))
         if "smoke" in f:
             continue
-        runs.setdefault(d["method"], []).append(d)
+        runs.setdefault(d["method"] + d.get("tag", ""), []).append(d)
     return runs
 
 
@@ -100,7 +103,7 @@ def plot_convergence(runs, fname, baseline_cost, ylabel, title):
         ha="right",
         transform=ax.get_yaxis_transform(),
     )
-    for m in ["multistart", "basin", "noisy", "cma"]:
+    for m in GLOBAL:
         for i, d in enumerate(runs.get(m, [])):
             tr = [t for t in d["trace"] if np.isfinite(t["best_cost"])]
             if not tr:
@@ -172,10 +175,10 @@ def stage2_fields(runs):
     eq, _, _, _ = setup()
     base = dload(os.path.join(RES, "stage2", "baseline_seed0_coilset.h5"))
     best_run = min(
-        (d for m in ["multistart", "basin", "noisy", "cma"] for d in runs.get(m, [])),
+        (d for m in GLOBAL for d in runs.get(m, [])),
         key=lambda d: d["best_cost"],
     )
-    tag = f"{best_run['method']}_seed{best_run['seed']}"
+    tag = f"{best_run['method']}{best_run.get('tag', '')}_seed{best_run['seed']}"
     best = dload(os.path.join(RES, "stage2", f"{tag}_coilset.h5"))
     grid = LinearGrid(M=60, N=60, NFP=1, endpoint=True)
     data = []
@@ -188,7 +191,8 @@ def stage2_fields(runs):
     ze = grid.nodes[grid.unique_zeta_idx, 2]
     titles = [
         f"Tutorial result (cost {runs['baseline'][0]['best_cost']:.1f})",
-        f"Best found: {LABELS[best_run['method']]} (cost {best_run['best_cost']:.1f})",
+        f"Best found: {LABELS[best_run['method'] + best_run.get('tag', '')]} "
+        f"(cost {best_run['best_cost']:.1f})",
     ]
     for ax, d, t in zip(axs[:2], data, titles):
         im = ax.pcolormesh(ze, th, d.T, cmap="RdBu_r", vmin=-vmax, vmax=vmax, shading="auto")
@@ -200,7 +204,7 @@ def stage2_fields(runs):
     cg = LinearGrid(N=100, endpoint=True)
     for cs, col, lab in (
         (base, BASELINE_COLOR, "tutorial"),
-        (best, COLORS[best_run["method"]], "best found"),
+        (best, COLORS[best_run["method"] + best_run.get("tag", "")], "best found"),
     ):
         # all coils including the stellarator-symmetric / field-period copies
         xyz = np.asarray(cs._compute_position(grid=cg, basis="xyz"))
@@ -271,7 +275,7 @@ def main():
             base,
             "objective value of each local minimum (log)",
             "Stage two: local minima reached by each method",
-            ["multistart", "basin", "noisy", "cma"],
+            [m for m in GLOBAL if m in r2],
         )
         if args.fields:
             stage2_fields(r2)

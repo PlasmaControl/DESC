@@ -569,92 +569,81 @@ def cma_es(
 
 def annealed_noisy_gradient(
     problem,
-    n_steps=600,
+    n_cycles=1000,
+    steps_per_cycle=200,
     lr=0.02,
-    noise0=0.3,
+    temperature0=0.3,
     x0=None,
     seed=0,
-    n_cycles=3,
-    n_polish=3,
     beta1=0.9,
     beta2=0.999,
     time_budget=np.inf,
     **local_kwargs,
 ):
-    """Adam with annealed injected noise, then local polishing of the best iterates.
+    """Langevin-driven basin hopping: annealed noisy-Adam excursions + local polish.
 
-    The search runs in the reduced (constraint-projected) variables ``z``, with
-    per-variable step sizes from Adam. At step ``k`` of a cycle a smooth random
-    perturbation of size ``noise_k = noise0 * (1 - k / K)^2`` (in units of
-    ``problem.scales``) is added. The noise is large early on, so the iterate can
-    leave shallow basins, and it is annealed to zero by the end of each cycle (a
-    stochastic-gradient Langevin / simulated-annealing hybrid). The step size is also
-    relative to ``problem.scales`` mapped into ``z``. The lowest-cost iterate of each
-    cycle is then polished with the local solver.
+    Each cycle starts from the incumbent local minimum and runs ``steps_per_cycle``
+    Adam steps in the (constraint-projected) variables, scaled by
+    ``problem.scales``. Every step adds smooth Langevin noise of amplitude
+    ``sqrt(2 * lr * T_k)`` (in units of ``problem.scales``). The temperature is
+    annealed as ``T_k = temperature0 * (1 - k / K)^2``, so it reaches zero at the end
+    of the cycle. Early in the cycle the noise lets the iterate cross low barriers,
+    while the gradient keeps it in low-cost regions. The excursion therefore follows
+    the landscape instead of being an isotropic jump as in :func:`basin_hopping`. The
+    end point is polished with the local solver and accepted if it improves on the
+    incumbent (a stochastic-gradient Langevin / simulated-annealing hybrid).
+
+    Pass a local minimum as ``x0`` (e.g. the result of ``problem.local_solve``): a
+    first-order method is slow on the initial large descent, which the local
+    least-squares solver does much faster.
     """
     t0 = time.time()
     rng = np.random.default_rng(seed)
-    x0 = problem.x_full() if x0 is None else np.asarray(x0)
-    z = np.asarray(problem.project(x0))
-    # per-coordinate scale in z: project the scale vector itself
-    zs = np.abs(np.asarray(problem.project(x0 + problem.scales)) - z)
-    zs = np.where(zs > 0, zs, np.median(zs[zs > 0]) if np.any(zs > 0) else 1.0)
+    x_inc = problem.x_full() if x0 is None else np.asarray(x0)
+    c_inc = problem.cost(x_inc)
     history, trace = [], []
-    steps_per_cycle = max(1, n_steps // n_cycles)
-    best_overall = (np.inf, z)
-    cycle_bests = []
-    for cyc in range(n_cycles):
+    _record(problem, trace, c_inc, "start")
+    if problem.verbose:
+        print(f"[noisy-grad] start: cost {c_inc:.4e}")
+    for cyc in range(1, n_cycles + 1):
+        if time.time() - t0 > time_budget:
+            break
+        z = np.asarray(problem.project(x_inc))
+        # per-coordinate scale in z: project the scale vector itself
+        zs = np.abs(np.asarray(problem.project(x_inc + problem.scales)) - z)
+        zs = np.where(zs > 0, zs, np.median(zs[zs > 0]) if np.any(zs > 0) else 1.0)
         m = np.zeros_like(z)
         v = np.zeros_like(z)
-        cyc_best = (np.inf, z)
+        c = c_inc
         for k in range(steps_per_cycle):
-            if time.time() - t0 > time_budget:
-                break
             c, g = problem.value_and_grad_z(z)
-            if not np.isfinite(c):  # blew up: go back to best of this cycle
-                z = cyc_best[1].copy()
-                m[:] = 0
-                v[:] = 0
-                continue
-            if c < cyc_best[0]:
-                cyc_best = (c, z.copy())
-            if c < best_overall[0]:
-                best_overall = (c, z.copy())
-            gs = g * zs  # gradient w.r.t. scaled variables z / zs
+            if not np.isfinite(c):
+                break
+            gs = g * zs  # gradient w.r.t. the scaled variables z / zs
             m = beta1 * m + (1 - beta1) * gs
             v = beta2 * v + (1 - beta2) * gs**2
             mh = m / (1 - beta1 ** (k + 1))
             vh = v / (1 - beta2 ** (k + 1))
-            step = -lr * mh / (np.sqrt(vh) + 1e-12)
-            noise = noise0 * (1 - k / steps_per_cycle) ** 2
-            if noise > 0:
+            z = z - lr * zs * mh / (np.sqrt(vh) + 1e-12)
+            T = temperature0 * (1 - k / steps_per_cycle) ** 2
+            if T > 0:
                 x_cur = problem.recover(z)
-                dz = np.asarray(
-                    problem.project(problem.perturb(x_cur, noise, rng))
-                ) - z
-            else:
-                dz = 0.0
-            z = z + step * zs + dz
-            if problem.verbose and k % 100 == 0:
-                print(
-                    f"[noisy-grad] cycle {cyc} step {k:4d}: cost {c:.4e} "
-                    f"noise {noise:.3f} best {best_overall[0]:.4e}"
-                )
-        cycle_bests.append(cyc_best)
-        history.append(dict(stage="cycle", cycle=cyc, cost=cyc_best[0]))
-        _record(problem, trace, best_overall[0], f"cycle {cyc}")
-        # restart next cycle from the best point so far (keeps exploring near it)
-        z = best_overall[1].copy()
-    best_x, best_cost = problem.recover(best_overall[1]), best_overall[0]
-    cands = sorted(cycle_bests, key=lambda t: t[0])[:n_polish]
-    for j, (c, zc) in enumerate(cands):
-        res = problem.local_solve(problem.recover(zc), **local_kwargs)
-        history.append(dict(stage="polish", cand=j, cost=res["cost"], x=res["x"]))
-        if res["cost"] < best_cost:
-            best_x, best_cost = res["x"], res["cost"]
-        _record(problem, trace, best_cost, f"polish {j}")
+                xn = problem.perturb(x_cur, np.sqrt(2 * lr * T), rng)
+                z = np.asarray(problem.project(xn))
+        if not np.isfinite(c):
+            history.append(dict(cycle=cyc, raw=np.inf, cost=np.inf, accepted=False))
+            continue
+        res = problem.local_solve(problem.recover(z), **local_kwargs)
+        accept = res["cost"] < c_inc
+        if accept:
+            x_inc, c_inc = res["x"], res["cost"]
+        history.append(
+            dict(cycle=cyc, raw=float(c), cost=res["cost"], accepted=accept, x=res["x"])
+        )
+        _record(problem, trace, c_inc, f"cycle {cyc}")
         if problem.verbose:
-            print(f"[noisy-grad] polish {j}: raw {c:.4e} -> {res['cost']:.4e}")
-    return _finish(
-        problem, best_x, best_cost, history, trace, "annealed_noisy_gradient", t0
-    )
+            print(
+                f"[noisy-grad] cycle {cyc:3d}: end of excursion {c:.4e} -> polished "
+                f"{res['cost']:.4e} {'ACC' if accept else 'rej'}  best {c_inc:.4e}"
+            )
+    return _finish(problem, x_inc, c_inc, history, trace, "annealed_noisy_gradient", t0)

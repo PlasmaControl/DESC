@@ -1,0 +1,100 @@
+{
+ "method": "noisy",
+ "seed": 0,
+ "sigma": 1.0,
+ "length_scale": 0.05,
+ "budget": 1200.0,
+ "wall_time": 969.5057263374329,
+ "n_local_solves": 3,
+ "nfev": 5652,
+ "ngev": 5608,
+ "best_cost": 208.03037240318594,
+ "metrics": {
+  "cost": 208.03037240318594,
+  "terms": {
+   "quadratic flux": 147.81182559136488,
+   "coil-coil dist": 0.016252742314831644,
+   "plasma-coil dist": 0.0,
+   "curvature": 60.2022940695062,
+   "length": 0.0
+  },
+  "Bn_over_B": 0.002447788034846282,
+  "min_coil_coil_dist": 0.05122938990430548,
+  "min_plasma_coil_dist": 0.40882942527178523,
+  "max_curvature_normalized": 2.0560454134357515,
+  "min_curvature_normalized": -1.1233668728529522,
+  "coil_lengths": [
+   15.207616740096434,
+   13.467922809261985,
+   11.807306537677723
+  ],
+  "currents": [
+   453485.2413310118,
+   -276938.15112263913,
+   96632.8875885523
+  ]
+ },
+ "trace": [
+  {
+   "time": 900.9003660678864,
+   "nlocal": 0,
+   "nfev": 5570,
+   "ngev": 5569,
+   "best_cost": 865674.0080826376,
+   "label": "cycle 0"
+  },
+  {
+   "time": 900.9004001617432,
+   "nlocal": 0,
+   "nfev": 5570,
+   "ngev": 5569,
+   "best_cost": 865674.0080826376,
+   "label": "cycle 1"
+  },
+  {
+   "time": 900.9004077911377,
+   "nlocal": 0,
+   "nfev": 5570,
+   "ngev": 5569,
+   "best_cost": 865674.0080826376,
+   "label": "cycle 2"
+  },
+  {
+   "time": 900.9004130363464,
+   "nlocal": 0,
+   "nfev": 5570,
+   "ngev": 5569,
+   "best_cost": 865674.0080826376,
+   "label": "cycle 3"
+  },
+  {
+   "time": 923.8209271430969,
+   "nlocal": 1,
+   "nfev": 5597,
+   "ngev": 5582,
+   "best_cost": 208.03037240318594,
+   "label": "polish 0"
+  },
+  {
+   "time": 943.1785891056061,
+   "nlocal": 2,
+   "nfev": 5624,
+   "ngev": 5595,
+   "best_cost": 208.03037240318594,
+   "label": "polish 1"
+  },
+  {
+   "time": 962.9203007221222,
+   "nlocal": 3,
+   "nfev": 5651,
+   "ngev": 5608,
+   "best_cost": 208.03037240318594,
+   "label": "polish 2"
+  }
+ ],
+ "local_minima": [
+  208.03037240318594,
+  208.03037240318594,
+  208.03037240318594
+ ]
+}

@@ -35,6 +35,10 @@ from desc.vmec_utils import (
     zernike_to_fourier,
 )
 
+__all__ = [
+    "VMECIO",
+]
+
 
 class VMECIO:
     """Performs input from VMEC netCDF files to DESC Equilibrium and vice-versa."""

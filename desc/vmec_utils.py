@@ -11,6 +11,10 @@ from desc.compute import get_transforms
 from desc.grid import LinearGrid
 from desc.utils import Timer
 
+__all__ = [
+    "make_boozmn_output",
+]
+
 
 def ptolemy_identity_fwd(m_0, n_0, s, c):
     """Convert from double-angle to double-Fourier form using Ptolemy's identity.

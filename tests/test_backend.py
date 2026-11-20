@@ -228,3 +228,66 @@ def test_qr_multiply(m, n, cond):
     x_np = np.linalg.lstsq(A, b, rcond=None)[0]
     np.testing.assert_allclose(x, x_ref, rtol=1e-8, atol=1e-8 * np.abs(x_np).max())
     np.testing.assert_allclose(x, x_np, rtol=1e-8, atol=1e-8 * np.abs(x_np).max())
+
+
+@pytest.mark.unit
+def test_cgroup_memory_limit(tmp_path):
+    """The tightest memory limit on the process's cgroup and its parents counts."""
+    from desc import _cgroup_memory_limit
+
+    gib = 1024**3
+    proc = tmp_path / "proc_cgroup"
+    # cgroup v2, as in a Slurm job: limits on parents of the task, none on the task
+    (tmp_path / "job" / "step" / "task").mkdir(parents=True)
+    (tmp_path / "job" / "memory.max").write_text(f"{4 * gib}\n")
+    (tmp_path / "job" / "step" / "memory.max").write_text(f"{8 * gib}\n")
+    (tmp_path / "job" / "step" / "task" / "memory.max").write_text("max\n")
+    proc.write_text("0::/job/step/task\n")
+    assert _cgroup_memory_limit(str(proc), str(tmp_path)) == 4 * gib
+    # cgroup v1 memory controller
+    (tmp_path / "memory" / "job").mkdir(parents=True)
+    (tmp_path / "memory" / "job" / "memory.limit_in_bytes").write_text(f"{gib}\n")
+    proc.write_text("12:cpuset:/job\n4:memory:/job\n")
+    assert _cgroup_memory_limit(str(proc), str(tmp_path)) == gib
+    # no cgroup, and a line that is not a cgroup entry
+    proc.write_text("0::/\n\n")
+    assert _cgroup_memory_limit(str(proc), str(tmp_path)) == float("inf")
+    assert _cgroup_memory_limit(str(tmp_path / "none")) == float("inf")
+
+
+@pytest.mark.unit
+def test_set_device_cpu_cgroup_limit(monkeypatch):
+    """On CPU, the available memory is no more than the cgroup limit."""
+    import desc
+
+    if desc.config["kind"] != "cpu":
+        pytest.skip("only on CPU")
+    for key in ["kind", "device", "avail_mem"]:
+        monkeypatch.setitem(desc.config, key, desc.config[key])
+    monkeypatch.setenv("JAX_PLATFORMS", "cpu")
+    monkeypatch.setattr(desc, "_cgroup_memory_limit", lambda: 0.5 * 1024**3)
+    desc.set_device("cpu")
+    assert desc.config["avail_mem"] == 0.5
+
+
+@pytest.mark.unit
+def test_jax_available_memory(monkeypatch):
+    """On a GPU, what is left in JAX's memory pool counts, not all free memory."""
+    from desc import backend
+
+    class FakeGPU:
+        def __init__(self, stats):
+            self.stats = stats
+
+        def memory_stats(self):
+            return self.stats
+
+    gib = 1024**3
+    monkeypatch.setitem(backend.desc_config, "avail_mem", 15.0)
+    for stats, avail_mem in [
+        ({"bytes_limit": 12 * gib, "bytes_in_use": gib}, 11),  # JAX's 75% pool
+        ({"bytes_limit": 32 * gib, "bytes_in_use": 0}, 15),  # pool > free memory
+        (None, 15),  # no pool, eg XLA_PYTHON_CLIENT_ALLOCATOR=platform
+    ]:
+        monkeypatch.setattr(backend.jax, "local_devices", lambda s=stats: [FakeGPU(s)])
+        assert backend._jax_available_memory() == avail_mem

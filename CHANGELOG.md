@@ -1,6 +1,14 @@
 Changelog
 =========
 
+Bug Fixes
+
+- Fixes ``jac_chunk_size="auto"`` running out of memory in the first Jacobian: the chunk is now sized to the memory left in JAX's device pool (75% of a GPU by default) and, on CPU, to the process's cgroup memory limit (e.g. in a Slurm job). The coefficient of its memory estimate is raised from 2.4e-7 to 3e-7 [#2362](https://github.com/PlasmaControl/DESC/issues/2362).
+
+
+v0.17.4
+-------
+
 New Features
 
 - Adds ``desc.external.agni.AgniStability``, the squared growth rate of the most unstable finite-n ideal MHD mode computed by the external AGNI solver (``pip install agnimhd``), with its gradient for optimization.

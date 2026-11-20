@@ -112,7 +112,14 @@ def stage2_table(runs, keys=ORDER):
 
 
 def plot_convergence(
-    runs, fname, baseline_cost, ylabel, title, keys=GLOBAL, base_label="tutorial result"
+    runs,
+    fname,
+    baseline_cost,
+    ylabel,
+    title,
+    keys=GLOBAL,
+    base_label="tutorial result",
+    legend_loc="lower left",
 ):
     fig, ax = plt.subplots(figsize=(7.2, 4.2), dpi=150)
     _style(ax)
@@ -150,7 +157,10 @@ def plot_convergence(
     ax.set_xlabel("wall-clock time [min]", color="#52514e")
     ax.set_ylabel(ylabel, color="#52514e")
     ax.set_title(title, loc="left", fontsize=11, color="#0b0b0b")
-    ax.legend(frameon=False, fontsize=8.5, loc="lower left")
+    if legend_loc == "upper right":
+        ax.legend(frameon=False, fontsize=8.5, loc="upper right", bbox_to_anchor=(1, 0.92))
+    else:
+        ax.legend(frameon=False, fontsize=8.5, loc=legend_loc)
     fig.tight_layout()
     fig.savefig(fname)
     plt.close(fig)
@@ -284,7 +294,7 @@ def stage2_fields(runs, variant="tutorial"):
         )
     ax.set_aspect("equal")
     ax.set_title("Coils, top view", fontsize=10, loc="left")
-    ax.legend(frameon=False, fontsize=8)
+    ax.legend(frameon=False, fontsize=8, loc="upper center", bbox_to_anchor=(0.5, 0.02), ncol=3)
     ax.axis("off")
     fig.savefig(os.path.join(FIG, f"stage2{sfx}_Bn_and_coils.png"), bbox_inches="tight")
     plt.close(fig)
@@ -356,6 +366,7 @@ def main():
                 "Stage two, tight distance/length bounds: best cost vs. time",
                 keys=keys,
                 base_label="single lsq-exact solve",
+                legend_loc="upper right",
             )
             plot_minima(
                 r2,

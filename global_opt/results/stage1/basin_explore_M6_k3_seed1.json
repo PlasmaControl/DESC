@@ -167,5 +167,6 @@
    "label": "hop 20 (sigma 1.78)"
   }
  ],
- "tag": "_explore"
+ "tag": "_explore",
+ "init": "results/stage1/baseline_M6_k3_seed0_eq.h5"
 }

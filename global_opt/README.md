@@ -24,11 +24,14 @@ RESULTS_PLACEHOLDER
 |---|---|
 | `desc_global.py` | Library: `ProjectedProblem` wrapper plus `multistart`, `basin_hopping`, `cma_es`, `annealed_noisy_gradient` |
 | `stage2_precise_QA.py` | Stage-two driver (tutorial problem), one method per call |
-| `run_stage2_all.sh` | Runs every stage-two method in sequence with the same budget and cores |
+| `run_stage2_all.sh` | Runs stage-two methods in sequence with the same budget and cores (`BUDGET`, `SEED`, `METHODS`, `EXTRA="--variant tight"`) |
 | `stage1_precise_QA.py` | Stage-one driver (precise QA example): baseline / multistart / basin hopping |
-| `analyze.py` | Builds `results/summary.md` and the figures |
-| `results/stage2/*.json`, `*_coilset.h5` | Per-run summaries (cost trace, every local minimum found, metrics) and the best coilsets |
+| `run_stage1_all.sh` | Same for stage one |
+| `analyze.py` | Builds `results/summary.md` and `figures/` |
+| `results/stage2/*.json`, `*_coilset.h5` | Per-run summaries (cost trace, every local minimum found, metrics) and the best coilsets; `*_tight_*` = tight-bounds variant |
 | `results/stage1/*.json`, `*_eq.h5` | Same for stage one, with the best equilibria |
+| `results/*/logs/` | Run logs (not committed) |
+| `results/stage2/superseded/` | First (failed) noisy-gradient design, kept for reference |
 
 ## How the global search works
 
@@ -72,7 +75,7 @@ orthogonally projected onto the linear constraints, so `FixCoilCurrent`,
 | `multistart` | Independent local solves from random perturbations of the initial guess | Embarrassingly parallel; also maps out the distribution of local minima |
 | `basin_hopping` | Perturb the incumbent minimum, solve locally, Metropolis accept on `log(cost)`, adapt step size towards ~40 % acceptance, restart from the best after repeated failures | Exploits the structure near good minima |
 | `cma_es` | CMA-ES on the raw objective (each generation is evaluated in one `vmap`-ed call), then `lsq-exact` polishing of the best candidates | Derivative-free; best used around an existing local minimum |
-| `annealed_noisy_gradient` | Adam in the projected variables with injected smooth noise whose amplitude decays to 0 over each cycle (SGLD / simulated annealing hybrid), then polishing | Cheap reverse-mode gradients; the noise lets iterates leave shallow basins |
+| `annealed_noisy_gradient` | Langevin-driven basin hopping: from the incumbent minimum, run Adam in the projected variables with smooth noise annealed to 0 over the cycle, then polish with `lsq-exact` and keep the result if it is better | The excursions follow low-cost valleys instead of jumping isotropically; most consistent method in the stage-two tests |
 
 The stage-one driver uses the same idea at the level of `Equilibrium.optimize`. The
 boundary is perturbed with `Equilibrium.perturb` (modes up to the current k, major
@@ -84,9 +87,19 @@ local optimization.
 ```bash
 pip install -e /path/to/DESC cma
 cd global_opt
-./run_stage2_all.sh                          # ~85 min on 3 CPU cores; BUDGET=... SEED=... METHODS="..."
+# stage two: 20 min per method on 3 cores
+./run_stage2_all.sh                                        # seed 0, all methods
+SEED=1 METHODS="multistart basin noisy" ./run_stage2_all.sh
+python stage2_precise_QA.py --method cma --max-order 2 --tag _lowmode
+EXTRA="--variant tight" LOGTAG=_tight METHODS="baseline multistart basin noisy" ./run_stage2_all.sh
+# stage one: 1 core, 1 h per method
 python stage1_precise_QA.py --method baseline
-python stage1_precise_QA.py --method multistart --budget 2400
-python stage1_precise_QA.py --method basin --budget 2400
+python stage1_precise_QA.py --method multistart --budget 3600
+python stage1_precise_QA.py --method basin --budget 3600
+python stage1_precise_QA.py --method basin --budget 2400 --seed 1 --tag _explore \
+    --init results/stage1/baseline_M6_k3_seed0_eq.h5
 python analyze.py --fields
 ```
+
+Runs write their JSON summary and best result when they finish. The stage-one
+driver also checkpoints after every improvement.

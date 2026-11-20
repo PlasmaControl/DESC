@@ -336,6 +336,7 @@ class Transform(IOAble):
         # with traced indices (a Grid built under jit) skip it: the fit then uses the
         # full pinv, and `transform`/`project` only gather with `zeta_idx`, which works
         # traced.
+        self.pest_plane_inv = None
         if _is_traced(zeta_idx):
             self.pest_plane_idx = None
             return
@@ -346,6 +347,10 @@ class Transform(IOAble):
             self.pest_plane_idx = np.argsort(_zi, kind="stable").reshape(
                 grid.num_zeta, -1
             )
+            # node order -> plane order, None if the grid is already zeta-major
+            inv = np.argsort(self.pest_plane_idx.ravel())
+            if not np.array_equal(inv, np.arange(inv.size)):
+                self.pest_plane_inv = inv
         else:
             # `transform` and `project` still work per node regardless
             # fit must use full pinv
@@ -432,15 +437,17 @@ class Transform(IOAble):
                     self.fft_grid, d, modes=temp_modes
                 )
         if self.method == "pest":
-            # Radial/poloidal factor on the whole grid; (num_nodes, num_lm_modes)
+            # Radial/poloidal factor on the whole grid; (num_nodes, num_lm_modes),
+            # or (num_zeta, nodes_per_plane, num_lm_modes) if planes are equal size
             temp_d = np.hstack(
                 [self.derivatives[:, :2], np.zeros((len(self.derivatives), 1))]
             ).astype(int)
             temp_modes = np.hstack([self.lm_modes, np.zeros((self.num_lm_modes, 1))])
             for d in temp_d:
-                self.matrices["pest"][d[0]][d[1]] = self.basis.evaluate(
-                    self.grid, d, modes=temp_modes
-                )
+                A = self.basis.evaluate(self.grid, d, modes=temp_modes)
+                if self.pest_plane_idx is not None:
+                    A = A[self.pest_plane_idx]
+                self.matrices["pest"][d[0]][d[1]] = A
             # Toroidal factor on unique zeta values only
             temp_d = np.hstack(
                 [np.zeros((len(self.derivatives), 2)), self.derivatives[:, 2:]]
@@ -642,10 +649,12 @@ class Transform(IOAble):
                 )
             c_mtrx = jnp.zeros((self.num_lm_modes * self.num_n_modes,))
             c_mtrx = put(c_mtrx, self.fft_index, c).reshape((-1, self.num_n_modes))
-            # evaluate radial and poloidal factor at each node
-            cc = A @ c_mtrx  # (num_nodes, num_n_modes)
-            # evaluate toroidal factor at each node
-            return jnp.einsum("kn,kn->k", cc, B[self.pest_zeta_idx])
+            if self.pest_plane_idx is None:
+                # evaluate both factors at each node
+                return jnp.einsum("kn,kn->k", A @ c_mtrx, B[self.pest_zeta_idx])
+            # toroidal factor on the unique planes, then one matmul per plane
+            y = jnp.einsum("zpl,lz->zp", A, c_mtrx @ B.T).ravel()
+            return y if self.pest_plane_inv is None else y[self.pest_plane_inv]
 
     def fit(self, x):
         """Transform from physical domain to spectral using weighted least squares fit.
@@ -738,10 +747,14 @@ class Transform(IOAble):
             return jnp.matmul(yy, B).flatten()[self.fft_index]
 
         elif self.method == "pest":
-            A = self.matrices["pest"][0][0]  # (num_nodes, num_lm_modes)
+            A = self.matrices["pest"][0][0]
             B = self.matrices["pest_toroidal"][0]  # (num_zeta, num_n_modes)
-            Ay = jnp.einsum("pl,p->pl", A, y)
-            yy = jnp.matmul(Ay.T, B[self.pest_zeta_idx])  # scale A by y
+            if self.pest_plane_idx is None:
+                Ay = jnp.einsum("pl,p->pl", A, y)
+                yy = jnp.matmul(Ay.T, B[self.pest_zeta_idx])  # scale A by y
+            else:
+                y = y[self.pest_plane_idx] if self.pest_plane_inv is not None else y
+                yy = jnp.einsum("zpl,zp->lz", A, y.reshape(A.shape[:2])) @ B
             return yy.flatten()[self.fft_index]
 
         elif self.method == "fft":

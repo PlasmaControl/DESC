@@ -1,6 +1,14 @@
 Changelog
 =========
 
+Bug Fixes
+
+- Fixes ``desc.set_device("gpu")`` raising ``ValueError`` when ``CUDA_VISIBLE_DEVICES`` lists GPU UUIDs or prefixes of them.
+
+
+v0.17.4
+-------
+
 New Features
 
 - Adds ``desc.external.agni.AgniStability``, the squared growth rate of the most unstable finite-n ideal MHD mode computed by the external AGNI solver (``pip install agnimhd``), with its gradient for optimization.

@@ -261,6 +261,8 @@ def main():
     final = evaluate(best_eq)
     summary = dict(
         method=args.method,
+        tag=args.tag,
+        init=args.init,
         seed=args.seed,
         M=args.M,
         kmax=args.kmax,

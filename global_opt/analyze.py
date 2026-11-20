@@ -28,6 +28,7 @@ COLORS = {
     "noisy": "#1baf7a",
     "cma": "#eda100",
     "cma_lowmode": "#e87ba4",
+    "basin_explore": "#eb6834",
 }
 BASELINE_COLOR = "#7a7974"
 LABELS = {
@@ -38,6 +39,7 @@ LABELS = {
     "noisy": "Annealed noisy gradient",
     "cma": "CMA-ES + polish",
     "cma_lowmode": "CMA-ES (|n|<=2 subspace) + polish",
+    "basin_explore": "Basin hopping from example result (1 core)",
 }
 ORDER = ["baseline", "converged", "multistart", "basin", "noisy", "cma", "cma_lowmode"]
 GLOBAL = ["multistart", "basin", "noisy", "cma", "cma_lowmode"]
@@ -241,7 +243,7 @@ def stage1_table(runs):
         "| Aspect ratio | iota (edge) | Local optimizations | Wall [s] |",
         "|---|---|---|---|---|---|---|---|---|---|",
     ]
-    for m in ["baseline", "multistart", "basin"]:
+    for m in ["baseline", "multistart", "basin", "basin_explore"]:
         for d in runs.get(m, []):
             b = d["best"]
             rows.append(

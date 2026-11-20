@@ -10,7 +10,7 @@ from interpax import interp1d
 from desc.backend import jit, jnp, put, sign
 from desc.basis import FourierZernikeBasis, PowerSeries, polyder_vec, polyval_vec
 from desc.derivatives import Derivative
-from desc.grid import Grid, _Grid
+from desc.grid import AbstractGridFlux, CustomGridFlux
 from desc.io import IOAble
 from desc.utils import (
     combination_permutation,
@@ -214,11 +214,11 @@ class _Profile(IOAble, ABC):
 
     def __call__(self, grid, params=None, dr=0, dt=0, dz=0):
         """Evaluate the profile at a given set of points."""
-        if not isinstance(grid, _Grid):
+        if not isinstance(grid, AbstractGridFlux):
             grid = jnp.atleast_1d(jnp.asarray(grid))
             if grid.ndim == 1:
                 grid = jnp.array([grid, jnp.zeros_like(grid), jnp.zeros_like(grid)]).T
-            grid = Grid(grid, sort=False)
+            grid = CustomGridFlux(grid, sort=False)
         return self.compute(grid, params, dr, dt, dz)
 
     def __repr__(self):
@@ -340,8 +340,8 @@ class ScaledProfile(_Profile):
 
         Parameters
         ----------
-        grid : Grid
-            locations to compute values at.
+        grid : AbstractGridFlux
+            Coordinates to compute values at.
         params : array-like
             Parameters to use. If not given, uses the
             values given by the self.params attribute.
@@ -443,8 +443,8 @@ class PowerProfile(_Profile):
 
         Parameters
         ----------
-        grid : Grid
-            locations to compute values at.
+        grid : AbstractGridFlux
+            Coordinates to compute values at.
         params : array-like
             Parameters to use. If not given, uses the
             values given by the self.params attribute.
@@ -547,8 +547,8 @@ class SumProfile(_Profile):
 
         Parameters
         ----------
-        grid : Grid
-            locations to compute values at.
+        grid : AbstractGridFlux
+            Coordinates to compute values at.
         params : array-like
             Parameters to use. If not given, uses the
             values given by the self.params attribute.
@@ -634,8 +634,8 @@ class ProductProfile(_Profile):
 
         Parameters
         ----------
-        grid : Grid
-            locations to compute values at.
+        grid : AbstractGridFlux
+            Coordinates to compute values at.
         params : array-like
             Parameters to use. If not given, uses the
             values given by the self.params attribute.
@@ -786,8 +786,8 @@ class PowerSeriesProfile(_Profile):
 
         Parameters
         ----------
-        grid : Grid
-            locations to compute values at.
+        grid : AbstractGridFlux
+            Coordinates to compute values at.
         params : array-like
             polynomial coefficients to use, in ascending order. If not given, uses the
             values given by the params attribute
@@ -917,8 +917,8 @@ class TwoPowerProfile(_Profile):
 
         Parameters
         ----------
-        grid : Grid
-            Locations to compute values at.
+        grid : AbstractGridFlux
+            Coordinates to compute values at.
         params : array-like
             Power law coefficients to use. Must be an array of size 3.
             If not given, uses the values given by the params attribute.
@@ -1024,8 +1024,8 @@ class SplineProfile(_Profile):
 
         Parameters
         ----------
-        grid : Grid
-            Locations to compute values at.
+        grid : AbstractGridFlux
+            Coordinates to compute values at.
         params : array-like
             Values of the function at ``self.knots``.
             If not given, uses ``self.params``.
@@ -1119,8 +1119,8 @@ class HermiteSplineProfile(_Profile):
 
         Parameters
         ----------
-        grid : Grid
-            Locations to compute values at.
+        grid : AbstractGridFlux
+            Coordinates to compute values at.
         params : array-like
             First (second) half stores function (derivative) values at ``knots``.
             If not given, uses ``self.params``.
@@ -1267,8 +1267,8 @@ class MTanhProfile(_Profile):
 
         Parameters
         ----------
-        grid : Grid
-            locations to compute values at.
+        grid : AbstractGridFlux
+            Coordinates to compute values at.
         params : array-like
             coefficients to use, in order. [ped, offset, sym, width, core_poly]
             If not given, uses the values given by the params attribute
@@ -1505,8 +1505,8 @@ class FourierZernikeProfile(_Profile):
 
         Parameters
         ----------
-        grid : Grid
-            locations to compute values at.
+        grid : AbstractGridFlux
+            Coordinates to compute values at.
         params : array-like
             Fourier-Zernike coefficients to use, in ascending order. If not given,
             uses the values given by the params attribute

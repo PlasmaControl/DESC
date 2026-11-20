@@ -1,6 +1,14 @@
 Changelog
 =========
 
+Bug Fixes
+
+- Fixes ``perturb`` with NumPy array weights and with 2D weight matrices.
+
+
+v0.17.4
+-------
+
 New Features
 
 - Adds `desc.compat.flip_magnetic_field` compatibility function to reverse the direction of an Equilibrium magnetic field.

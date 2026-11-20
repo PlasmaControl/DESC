@@ -1,6 +1,14 @@
 Changelog
 =========
 
+Bug Fixes
+
+- Fixes ``perturb`` with NumPy array weights and with 2D weight matrices.
+
+
+v0.17.4
+-------
+
 New Features
 
 - Adds a ``"pest"`` method to ``Transform`` for grids where zeta is a tensor axis but (rho, theta) is not, e.g. a uniform PEST grid mapped to DESC coordinates. It evaluates the radial/poloidal modes on the nodes and the toroidal modes on the unique zeta values only, instead of the full basis at every node as ``"direct1"`` does. ``get_transforms`` now honors an explicit ``method`` other than ``"auto"``/``"jitable"``, which it previously replaced with ``"auto"``.

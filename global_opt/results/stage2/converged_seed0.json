@@ -1,0 +1,45 @@
+{
+ "method": "converged",
+ "seed": 0,
+ "sigma": 1.0,
+ "length_scale": 0.05,
+ "budget": 1200.0,
+ "wall_time": 68.41902327537537,
+ "n_local_solves": 1,
+ "nfev": 80,
+ "ngev": 41,
+ "best_cost": 197.86748235839758,
+ "metrics": {
+  "cost": 197.86748235839758,
+  "terms": {
+   "quadratic flux": 197.8553324533387,
+   "coil-coil dist": 0.0,
+   "plasma-coil dist": 0.0,
+   "curvature": 0.01214990505878254,
+   "length": 0.0
+  },
+  "Bn_over_B": 0.0009162968651274173,
+  "min_coil_coil_dist": 0.14367452294850966,
+  "min_plasma_coil_dist": 0.32948044691653755,
+  "max_curvature_normalized": 2.0018049925647374,
+  "min_curvature_normalized": -1.001669354495423,
+  "coil_lengths": [
+   6.9687703836879304,
+   5.415625711126842,
+   5.522942782822994
+  ],
+  "currents": [
+   453485.2413310118,
+   260192.93956427273,
+   333803.98312845913
+  ]
+ },
+ "trace": [
+  {
+   "time": 61.89964246749878,
+   "nlocal": 1,
+   "best_cost": 197.86748235839758
+  }
+ ],
+ "local_minima": []
+}

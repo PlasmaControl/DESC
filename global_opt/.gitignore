@@ -1,0 +1,3 @@
+__pycache__/
+results/*/logs/
+results/stage1/initial_eq_*.h5

@@ -1,6 +1,14 @@
 Changelog
 =========
 
+Performance Improvements
+
+- Less overhead when updating the targets of linear constraints and reading ``params_dict``, which adds up when an equilibrium is perturbed and re-solved many times (eg in ``ProximalProjection``), especially on a GPU.
+
+
+v0.17.4
+-------
+
 New Features
 
 - Adds ``desc.external.agni.AgniStability``, the squared growth rate of the most unstable finite-n ideal MHD mode computed by the external AGNI solver (``pip install agnimhd``), with its gradient for optimization.

@@ -238,7 +238,27 @@ class FixParameters(_Objective):
             Optimizable object that will be optimized to satisfy the Objective.
 
         """
-        self.target = self.compute(thing.params_dict)
+        if type(self).compute is FixParameters.compute:
+            # Same as self.compute(thing.params_dict), but on the host and only
+            # reading the parameters that are fixed. Indexing every parameter eagerly
+            # with jax is slow, more so on a GPU, and this is called for every
+            # constraint each time an equilibrium is perturbed.
+            if isinstance(self._params, dict):
+                # leaves of a dict are ordered by key
+                params = [
+                    getattr(thing, key) if idx.size else None
+                    for key, idx in zip(sorted(self._params), self._indices)
+                ]
+            else:
+                params = tree_leaves(thing.params_dict)
+            target = [
+                np.atleast_1d(np.asarray(param))[idx]
+                for param, idx in zip(params, self._indices)
+                if idx.size
+            ]
+            self.target = np.concatenate(target) if len(target) else np.zeros(0)
+        else:
+            self.target = self.compute(thing.params_dict)
         if not self._use_jit:
             self._unjit()
 

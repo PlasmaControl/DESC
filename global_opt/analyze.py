@@ -465,6 +465,32 @@ def pool_stats_table(runs, keys):
     return "\n".join(rows)
 
 
+# ---------------------------------------------------------------------------
+# fixed coil frame (rotmat/shift fixed, as DESC's Optimizer does)
+# ---------------------------------------------------------------------------
+
+FRAME_KEYS = ["multistart", "basin", "noisy", "pool_nodefl", "pool"]
+
+
+def frame_table(free, fixed):
+    rows = [
+        "| Method | Coil frame | Seed 0 | Seed 1 | Seed 2 | Worst seed |",
+        "|---|---|---|---|---|---|",
+    ]
+    for tag, runs in (("free (rounds 1-2)", free), ("fixed (DESC default)", fixed)):
+        for k in ["baseline"]:
+            if k in runs:
+                rows.append(f"| {LABELS[k]} | {tag} | {runs[k][0]['best_cost']:.2f} | – | – | – |")
+    for k in FRAME_KEYS:
+        for tag, runs in (("free (rounds 1-2)", free), ("fixed (DESC default)", fixed)):
+            if k not in runs:
+                continue
+            by = {d["seed"]: d["best_cost"] for d in runs[k]}
+            cells = [f"{by[i]:.2f}" if i in by else "–" for i in range(3)]
+            rows.append(f"| {LABELS[k]} | {tag} | " + " | ".join(cells) + f" | {max(by.values()):.2f} |")
+    return "\n".join(rows)
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--fields", action="store_true")
@@ -567,6 +593,21 @@ def main():
                 [m for m in ["multistart", "basin", "basin_explore"] if m in r1],
                 labels=STAGE1_LABELS,
                 xmax=1.0,
+            )
+    rf = load("stage2_fixed")
+    if rf and r2:
+        out += ["## Stage two with the coil frame fixed (rotmat, shift)", "",
+                frame_table(r2, rf), ""]
+        keys = [m for m in IMPROVED if m in rf]
+        if keys and "baseline" in rf:
+            plot_convergence(
+                rf,
+                os.path.join(FIG, "stage2_fixed_convergence.png"),
+                rf["baseline"][0]["best_cost"],
+                "best objective found",
+                "Stage two, coil rotation and shift fixed: best cost vs. time",
+                keys=keys,
+                legend_loc="below",
             )
     rn = load_nae()
     if rn:

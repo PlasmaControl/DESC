@@ -243,6 +243,12 @@ class ProjectedProblem:
         If > 0, a :class:`ScaledDeflation` term with this many centers is appended to
         the objective (inactive until :meth:`set_deflation` is called). Requires a
         single optimizable thing.
+    free_curve_frame : bool
+        DESC's ``Optimizer.optimize`` adds self-consistency constraints for every
+        optimized thing; for curves these fix ``shift`` and ``rotmat``, which are
+        redundant with the Fourier coefficients. The default (False) does the same.
+        True leaves them free, which reproduces the first two rounds of stage-two
+        runs (``results/stage2``); equilibria always get their constraints.
     """
 
     def __init__(
@@ -260,6 +266,7 @@ class ProjectedProblem:
         verbose=1,
         deflation_slots=0,
         deflation_reduction="sum",
+        free_curve_frame=False,
     ):
         self.things = list(things) if isinstance(things, (list, tuple)) else [things]
         self.verbose = verbose
@@ -290,17 +297,16 @@ class ProjectedProblem:
             )
         if not objective.built:
             objective.build(verbose=0)
-        # Equilibria need their self-consistency constraints (boundary vs. interior
-        # coefficients, axis, lambda gauge), as Optimizer.optimize adds them, or e.g.
-        # Rb_lmn would stay frozen while R_lmn changes. For curves, Optimizer.optimize
-        # would also fix ``shift`` and ``rotmat``; they are redundant with the Fourier
-        # coefficients, and all stage-two runs here leave them free for consistency.
+        # Self-consistency constraints, as Optimizer.optimize adds them. Equilibria
+        # always need them (boundary vs. interior coefficients, axis, lambda gauge),
+        # or e.g. Rb_lmn would stay frozen while R_lmn changes. For curves they fix
+        # the redundant ``shift`` and ``rotmat`` unless ``free_curve_frame``.
         from desc.equilibrium import Equilibrium
         from desc.objectives.getters import maybe_add_self_consistency
 
         constraints = tuple(constraints)
         for t in obj_things:
-            if isinstance(t, Equilibrium):
+            if isinstance(t, Equilibrium) or not free_curve_frame:
                 constraints = maybe_add_self_consistency(t, constraints)
         constraint = ObjectiveFunction(tuple(constraints))
         constraint.build(verbose=0)

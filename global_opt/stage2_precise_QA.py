@@ -71,11 +71,16 @@ def setup(num_coils=3, r_over_a=3.0, N=10, variant="tutorial"):
     """Return (eq, coilset, objective, constraints) as in the DESC tutorial.
 
     ``variant="tight"`` replaces the tutorial's loose coil-coil distance and length
-    bounds by the values the tutorial's own result has (coil-coil distance >= 0.14 m,
-    every coil <= 7 m long), so better minima cannot come from longer coils or coils
-    packed closer together; the tutorial result stays feasible.
+    bounds by coil-coil distance >= 0.14 m and every coil <= 7 m. These are the
+    values of the single-solve result when coil rotation and shift are left free
+    (``--free-frame``, the setting of rounds one and two).
+    ``variant="matched"`` uses the values of the tutorial's actual result (rotation
+    and shift fixed, cost 31.0): coil-coil distance >= 0.105 m, every coil <= 7.8 m.
+    That result stays feasible, and better minima cannot come from longer or
+    closer-packed coils.
     """
-    tight = variant == "tight"
+    tight = variant in ("tight", "matched")
+    cc_min, len_max = (0.105, 7.8) if variant == "matched" else (0.14, 7.0)
     eq = desc.examples.get("precise_QA")
     coilset = initialize_modular_coils(eq, num_coils=num_coils, r_over_a=r_over_a)
     coilset = coilset.to_FourierXYZ(N=N)
@@ -94,7 +99,7 @@ def setup(num_coils=3, r_over_a=3.0, N=10, variant="tutorial"):
             ),
             CoilSetMinDistance(
                 coilset,
-                bounds=(0.14, np.inf) if tight else (0.1, np.inf),
+                bounds=(cc_min, np.inf) if tight else (0.1, np.inf),
                 normalize_target=tight,  # tight bound is in meters
                 grid=coil_grid,
                 weight=w["coil-coil min dist"],
@@ -118,7 +123,7 @@ def setup(num_coils=3, r_over_a=3.0, N=10, variant="tutorial"):
             ),
             CoilLength(
                 coilset,
-                bounds=(0, 7.0)
+                bounds=(0, len_max)
                 if tight
                 else (0, 2 * np.pi * (coilset[0].compute("length")["length"])),
                 normalize_target=True,
@@ -185,12 +190,19 @@ def main():
         default=None,
         help="cma only: search only coil Fourier modes |n| <= max-order",
     )
-    p.add_argument("--variant", default="tutorial", choices=["tutorial", "tight"])
+    p.add_argument("--variant", default="tutorial", choices=["tutorial", "tight", "matched"])
+    p.add_argument(
+        "--free-frame",
+        action="store_true",
+        help="leave coil rotmat/shift free (as in results/stage2); default fixes them "
+        "like DESC's Optimizer and writes to results/stage2_fixed",
+    )
     p.add_argument("--tag", default="")
     p.add_argument("--smoke", action="store_true", help="tiny budgets for testing")
     args = p.parse_args()
 
-    os.makedirs(OUTDIR, exist_ok=True)
+    outdir = OUTDIR if args.free_frame else OUTDIR + "_fixed"
+    os.makedirs(outdir, exist_ok=True)
     t0 = time.time()
     eq, coilset, obj, cons = setup(variant=args.variant)
     if args.variant != "tutorial" and not args.tag:
@@ -204,6 +216,7 @@ def main():
         alpha=0.5,
         current_rel=0.1,
         deflation_slots=8 if args.method == "pool" else 0,
+        free_curve_frame=args.free_frame,
     )
     x0 = problem.x_full()
     print(f"initial cost {problem.cost(x0):.4e}")
@@ -284,6 +297,7 @@ def main():
         method=m,
         tag=args.tag,
         variant=args.variant,
+        free_curve_frame=args.free_frame,
         seed=args.seed,
         sigma=args.sigma,
         length_scale=args.length_scale,
@@ -309,10 +323,10 @@ def main():
         ] if m in ("pool", "pool_nodefl") else None,
     )
     print(json.dumps({k: v for k, v in summary.items() if k != "trace"}, indent=1))
-    with open(os.path.join(OUTDIR, f"{tag}.json"), "w") as f:
+    with open(os.path.join(outdir, f"{tag}.json"), "w") as f:
         json.dump(summary, f, indent=1)
     problem.set_x_full(result["x"])
-    coilset.save(os.path.join(OUTDIR, f"{tag}_coilset.h5"))
+    coilset.save(os.path.join(outdir, f"{tag}_coilset.h5"))
 
 
 if __name__ == "__main__":

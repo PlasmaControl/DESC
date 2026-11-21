@@ -1,0 +1,51 @@
+{
+ "method": "baseline",
+ "tag": "",
+ "variant": "tutorial",
+ "free_curve_frame": false,
+ "seed": 0,
+ "sigma": 1.0,
+ "length_scale": 0.05,
+ "budget": 1200.0,
+ "wall_time": 77.55154800415039,
+ "n_local_solves": 1,
+ "nfev": 78,
+ "ngev": 50,
+ "best_cost": 31.00449995138282,
+ "metrics": {
+  "cost": 31.00449995138282,
+  "terms": {
+   "quadratic flux": 31.00412372218157,
+   "coil-coil dist": 0.0,
+   "plasma-coil dist": 0.0,
+   "curvature": 0.00037622920124629063,
+   "length": 0.0
+  },
+  "Bn_over_B": 0.0003655668805677733,
+  "min_coil_coil_dist": 0.10503734269509507,
+  "min_plasma_coil_dist": 0.3530275805611622,
+  "max_curvature_normalized": 2.000324358420747,
+  "min_curvature_normalized": -1.0001681430488492,
+  "coil_lengths": [
+   7.788429055573394,
+   6.237997465629403,
+   6.120222564901614
+  ],
+  "currents": [
+   453485.2413310118,
+   282613.9871304009,
+   320967.387252019
+  ]
+ },
+ "trace": [
+  {
+   "time": 68.38867044448853,
+   "nlocal": 1,
+   "best_cost": 31.00449995138282
+  }
+ ],
+ "local_minima": [],
+ "abandoned": [],
+ "pool_stats": null,
+ "hops": null
+}

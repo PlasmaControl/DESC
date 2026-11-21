@@ -30,7 +30,7 @@ COLORS = {
     "cma_lowmode": "#e87ba4",
     "basin_explore": "#eb6834",
     "pool": "#6250d6",
-    "pool_nodefl": "#a59bef",
+    "pool_nodefl": "#6250d6",  # drawn dashed
 }
 BASELINE_COLOR = "#7a7974"
 LABELS = {
@@ -155,6 +155,7 @@ def plot_convergence(
                 where="post",
                 color=color(m),
                 lw=2,
+                ls="--" if _base(m) == "pool_nodefl" else "-",
                 alpha=[1.0, 0.55, 0.35][min(i, 2)],
                 label=(label(m) if i == 0 else None),
             )
@@ -165,12 +166,15 @@ def plot_convergence(
     ax.set_xlabel("wall-clock time [min]", color="#52514e")
     ax.set_ylabel(ylabel, color="#52514e")
     ax.set_title(title, loc="left", fontsize=11, color="#0b0b0b")
-    if legend_loc == "upper right":
+    if legend_loc == "below":
+        ax.legend(frameon=False, fontsize=8.5, loc="upper center", bbox_to_anchor=(0.5, -0.2),
+                  ncol=3)
+    elif legend_loc == "upper right":
         ax.legend(frameon=False, fontsize=8.5, loc="upper right", bbox_to_anchor=(1, 0.92))
     else:
         ax.legend(frameon=False, fontsize=8.5, loc=legend_loc)
     fig.tight_layout()
-    fig.savefig(fname)
+    fig.savefig(fname, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -425,7 +429,7 @@ def plot_nae(runs):
     fig.savefig(os.path.join(FIG, "nae_search.png"))
     plt.close(fig)
     # diversity map
-    fig, ax = plt.subplots(figsize=(7.2, 4.4), dpi=150)
+    fig, ax = plt.subplots(figsize=(7.2, 5.0), dpi=150)
     _style(ax)
     for m in NAE_LABELS:
         v = [x for d in runs.get(m, []) for x in d["solutions"] if x["valid"]]
@@ -437,7 +441,8 @@ def plot_nae(runs):
     ax.set_xlabel("rotational transform at the edge", color="#52514e")
     ax.set_ylabel("QS error (Boozer f_B, ρ = 0.5–1)", color="#52514e")
     ax.set_title("Every valid NAE-constrained equilibrium found", loc="left", fontsize=11)
-    ax.legend(frameon=False, fontsize=8.5)
+    ax.legend(frameon=False, fontsize=8.5, scatterpoints=1, ncol=2, loc="upper center",
+              bbox_to_anchor=(0.5, -0.16))
     fig.tight_layout()
     fig.savefig(os.path.join(FIG, "nae_diversity.png"))
     plt.close(fig)
@@ -452,7 +457,8 @@ def pool_stats_table(runs, keys):
             hops = d.get("hops") or []
             n = sum(1 for h in hops if h.get("hop", 0) > 0)
             rows.append(
-                f"| {LABELS[_base(k)]} | {d['seed']} | {n} | {st.get('abandoned', 0)} "
+                f"| {LABELS[_base(k)]}{', tight bounds' if k.endswith('_tight') else ''} "
+                f"| {d['seed']} | {n} | {st.get('abandoned', 0)} "
                 f"| {n - st.get('abandoned', 0)} | {st.get('inserted', 0)} "
                 f"| {st.get('duplicates', 0)} | {d['best_cost']:.2f} |"
             )
@@ -495,6 +501,7 @@ def main():
                 "best objective found",
                 "Stage two: deflated pool search vs. the best earlier methods",
                 keys=keys,
+                legend_loc="below",
             )
             plot_minima(
                 r2,

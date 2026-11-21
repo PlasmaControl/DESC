@@ -42,6 +42,7 @@ def map_coordinates(  # noqa: C901
     tol=1e-6,
     maxiter=30,
     full_output=False,
+    mask_outside=False,
     **kwargs,
 ):
     """Transform coordinates given in ``inbasis`` to ``outbasis``.
@@ -83,6 +84,14 @@ def map_coordinates(  # noqa: C901
         the root finding and the second is the number of iterations. The residual
         identifies failed inversions, which are returned as computed (see
         Returns).
+    mask_outside : bool, optional
+        Only for ``inbasis`` made of ``"R"``, ``"phi"`` and ``"Z"``. If True, points
+        outside the last closed flux surface (see ``is_inside``) are not root found:
+        their outputs are NaN, with residual ``inf`` and 0 iterations in ``info``.
+        Points closer to the surface than the mesh of ``is_inside`` resolves (under
+        1 mm for DESC's example equilibria) may be put on the wrong side, so such a
+        point inside may come back NaN. Default is False, which leaves every point
+        to the root finding.
     kwargs : dict, optional
         Additional keyword arguments to pass to ``root`` such as ``maxiter_ls``,
         ``alpha``.
@@ -109,6 +118,11 @@ def map_coordinates(  # noqa: C901
     )
     inbasis = tuple(inbasis)
     outbasis = tuple(outbasis)
+    errorif(
+        mask_outside and sorted(inbasis) != ["R", "Z", "phi"],
+        ValueError,
+        f"mask_outside requires inbasis made of R, phi and Z, got {inbasis}.",
+    )
     params = setdefault(params, eq.params_dict)
 
     basis_derivs = tuple(f"{X}_{d}" for X in inbasis for d in ("r", "t", "z"))
@@ -212,6 +226,14 @@ def map_coordinates(  # noqa: C901
 
     yk = fixup(yk)
 
+    if mask_outside:
+        keep = is_inside(
+            eq, coords[:, [inbasis.index(k) for k in ("R", "phi", "Z")]], params
+        )
+        # A masked point starts at the image of its guess, so the root finding
+        # stops there at once instead of running to ``maxiter``.
+        coords = jnp.where(keep[:, None], coords, compute(yk, inbasis))
+
     vecroot = jit(
         vmap(
             lambda x0, *p: root(
@@ -236,9 +258,107 @@ def map_coordinates(  # noqa: C901
         yk = vecroot(yk, coords)
 
     out = compute(yk, outbasis)
+    if mask_outside:
+        out = jnp.where(keep[:, None], out, jnp.nan)
+        if full_output:
+            res = jnp.where(keep, res, jnp.inf)
+            niter = jnp.where(keep, niter, 0)
     if full_output:
         return out, (res, niter)
     return out
+
+
+def is_inside(eq, coords, params=None, num_theta=256, num_zeta=1024):
+    """Test whether points given in real space lie inside the plasma.
+
+    The last closed flux surface is meshed from its positions (R, ϕ, Z) on a grid
+    of ``num_theta`` values of θ and ``num_zeta`` values of ζ per field period,
+    linearly between the grid points. A point is inside if the ray from it toward
+    increasing R in its plane ϕ crosses the mesh an odd number of times. The mesh
+    is made of the cuts of the lines of constant θ by the planes ϕ = ζ of the grid,
+    so in the plane of a point it is the polygon interpolated between the two cuts
+    around it.
+
+    The mesh departs from the surface by up to about its cell size squared times the
+    curvature of the surface, so points closer to the surface than that may be put
+    on the wrong side. At the default resolution that is under 1 mm for DESC's
+    example equilibria.
+
+    ϕ is assumed to increase with ζ along every line of constant θ.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium whose last closed flux surface is tested against.
+    coords : ndarray
+        Shape (k, 3).
+        Real space coordinates (R, ϕ, Z) of the points.
+    params : dict
+        Values of equilibrium parameters to use, e.g. ``eq.params_dict``.
+    num_theta, num_zeta : int
+        Number of grid points in θ and in ζ per field period of the mesh.
+
+    Returns
+    -------
+    inside : jnp.ndarray
+        Shape (k, ).
+        True for points inside the last closed flux surface, False for points
+        outside it and for points with non-finite coordinates.
+
+    """
+    params = setdefault(params, eq.params_dict)
+    grid = LinearGrid(rho=1.0, theta=num_theta, zeta=num_zeta, NFP=eq.NFP)
+    names = ["R", "phi", "Z"]
+    data = compute_fun(
+        eq,
+        names,
+        params,
+        get_transforms(names, eq, grid),
+        get_profiles(names, eq, grid),
+    )
+    # shape (num_zeta + 1, num_theta), the last row being the first one a field
+    # period on
+    period = 2 * np.pi / eq.NFP
+    R, phi, Z = (
+        jnp.pad(grid.meshgrid_reshape(data[x], "rzt")[0], ((0, 1), (0, 0)), "wrap")
+        for x in names
+    )
+    phi = phi.at[-1].add(period)
+    # Cut the lines of constant θ by the planes ϕ = period * k / num_zeta
+    planes = period * np.arange(num_zeta)[:, None] / num_zeta
+    cut = phi[:1] + (planes - phi[:1]) % period
+    j = vmap(partial(jnp.searchsorted, side="right"), in_axes=1, out_axes=1)(phi, cut)
+    j = jnp.clip(j - 1, 0, num_zeta - 1)
+    a, b = (jnp.take_along_axis(phi, i, axis=0) for i in (j, j + 1))
+    w = (cut - a) / (b - a)
+    R, Z = (
+        jnp.pad(
+            jnp.take_along_axis(x, j, axis=0) * (1 - w)
+            + jnp.take_along_axis(x, j + 1, axis=0) * w,
+            ((0, 1), (0, 0)),
+            "wrap",
+        )
+        for x in (R, Z)
+    )
+    coords = jnp.atleast_2d(jnp.asarray(coords, dtype=float))
+    return batch_map(
+        lambda c: _inside_mesh(R, Z, period, c), coords, max(2**21 // num_theta, 1)
+    )
+
+
+def _inside_mesh(R, Z, period, coords):
+    """``is_inside`` for the cuts R, Z of shape (num_zeta + 1, num_theta)."""
+    R0, phi0, Z0 = (x[:, None] for x in coords.T)
+    # the polygon in the plane of each point, shape (k, num_theta)
+    x = phi0[:, 0] % period / period * (R.shape[0] - 1)
+    k = jnp.clip(jnp.floor(x).astype(int), 0, R.shape[0] - 2)
+    w = (x - k)[:, None]
+    r, z = (y[k] * (1 - w) + y[k + 1] * w for y in (R, Z))
+    # Crossings of the ray Z = Z0, R > R0 by the polygon. A vertex on the ray
+    # counts as above it, so each crossing is counted once.
+    r1, z1 = jnp.roll(r, -1, axis=1), jnp.roll(z, -1, axis=1)
+    cross = ((z > Z0) != (z1 > Z0)) & (R0 < r + (Z0 - z) * (r1 - r) / (z1 - z))
+    return jnp.sum(cross, axis=1) % 2 == 1
 
 
 def _initial_guess_heuristic(yk, coords, inbasis, eq, profiles):

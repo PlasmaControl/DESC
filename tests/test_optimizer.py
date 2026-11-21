@@ -75,6 +75,7 @@ from desc.optimize import (
 from desc.optimize.optimizer import _parse_x_scale
 from desc.optimize.tr_subproblems import (
     trust_region_step_exact_cho,
+    trust_region_step_exact_cho_lsq,
     trust_region_step_exact_qr,
     trust_region_step_exact_svd,
 )
@@ -226,6 +227,35 @@ def test_tr_step_exact_cho_indefinite():
         assert np.linalg.eigvalsh(B + float(alpha) * np.eye(n)).min() > 0
         p_alpha = np.linalg.solve(B + float(alpha) * np.eye(n), -g)
         assert abs(np.linalg.norm(p_alpha) - trust_radius) <= rtol * trust_radius
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("n_zero", [0, 5])
+def test_tr_step_exact_cho_lsq(n_zero):
+    """The least squares cho method when J.T@J is ill-conditioned or singular.
+
+    DESC's scaled equilibrium Jacobians often have columns that are exactly zero, so
+    J.T@J is singular (n_zero > 0), and the rest of J is ill-conditioned. Inside the
+    trust region the step must be the minimum norm Gauss-Newton step, and on the
+    boundary it must match the SVD method.
+    """
+    J, f = _tr_test_problem(60, 30, 1e6, seed=0)
+    J[:, :n_zero] = 0
+    p_gn = np.linalg.lstsq(J, -f, rcond=None)[0]
+    args = jnp.asarray(f), jnp.asarray(J), jnp.asarray(J.T @ J)
+    U, s, Vt = jnp.linalg.svd(J, full_matrices=False)
+
+    trust_radius = 2 * np.linalg.norm(p_gn)
+    p, hits_boundary, _ = trust_region_step_exact_cho_lsq(*args, trust_radius)
+    assert not hits_boundary
+    np.testing.assert_allclose(p, p_gn, rtol=0, atol=1e-8 * np.linalg.norm(p_gn))
+
+    trust_radius = 0.1 * np.linalg.norm(p_gn)
+    p, hits_boundary, _ = trust_region_step_exact_cho_lsq(*args, trust_radius)
+    p_svd, _, _ = trust_region_step_exact_svd(f, U, s, Vt.T, trust_radius)
+    assert hits_boundary
+    # the two root-finds stop at slightly different alpha within rtol
+    np.testing.assert_allclose(p, p_svd, rtol=0, atol=1e-3 * trust_radius)
 
 
 @jit

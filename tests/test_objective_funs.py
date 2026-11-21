@@ -146,6 +146,31 @@ class TestObjectiveFunction:
         test("iota", Equilibrium(current=PowerSeriesProfile(0)), None, True)
 
     @pytest.mark.unit
+    def test_generic_theta_zeta_only(self):
+        """Test GenericObjective for quantities that only depend on theta or zeta."""
+        eq = get("HELIOTRON")
+        grid = LinearGrid(L=2, M=eq.M_grid, N=4, NFP=eq.NFP)
+        for f, label in [
+            ("theta", "poloidal"),
+            ("zeta", "zeta"),
+            ("A(z)", "zeta"),
+            ("perimeter(z)", "zeta"),
+        ]:
+            obj = GenericObjective(f, thing=eq, grid=grid)
+            obj.build()
+            val = grid.compress(eq.compute(f, grid=grid)[f], surface_label=label)
+            assert obj.dim_f == getattr(grid, f"num_{label}")
+            np.testing.assert_allclose(obj.compute(eq.params_dict), val)
+
+        # one target per unique zeta is accepted
+        target = grid.compress(grid.nodes[:, 2], surface_label="zeta")
+        obj = GenericObjective("zeta", thing=eq, grid=grid, target=target)
+        obj.build()
+        np.testing.assert_allclose(
+            obj.compute_scaled_error(eq.params_dict), 0, atol=1e-14
+        )
+
+    @pytest.mark.unit
     def test_objective_from_user(self):
         """Test ObjectiveFromUser for arbitrary callable."""
 

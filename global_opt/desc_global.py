@@ -38,6 +38,7 @@ import numpy as np
 
 from desc.backend import jnp
 from desc.objectives import ObjectiveFunction
+from desc.objectives.objective_funs import _Objective
 from desc.optimizable import OptimizableCollection
 from desc.optimize import LinearConstraintProjection, Optimizer
 
@@ -152,6 +153,71 @@ def perturbation_scales(
 
 
 # ---------------------------------------------------------------------------
+# Deflation
+# ---------------------------------------------------------------------------
+
+
+class ScaledDeflation(_Objective):
+    """Sum-reduction deflation penalty with centers that can change without recompiling.
+
+    For known states ``c_i`` (e.g. local minima already found) the penalty is::
+
+        M(x) = sum_i a_i * d_i(x)^(-p),   d_i = rms((x - c_i) / s)
+
+    where ``s`` are the perturbation scales (so distances are measured in the same
+    mode-aware units as the random steps), and the residual is the hinge
+    ``w * max(0, M(x) - r^(-p))``. It is zero outside balls of radius ``r`` around
+    every center and grows without bound inside them, i.e. it enforces the deflation
+    constraint ``||x - c_i|| >= r`` of Panici et al. (2026), eq. (2.5), in its
+    sum-reduction form (their eq. 4.4, with zero shift), as a least-squares penalty.
+
+    Centers, activity flags ``a_i``, weight ``w`` and radius ``r`` are stored as
+    array attributes, i.e. as dynamic pytree leaves of the objective: changing them
+    between local solves does not trigger recompilation. With all ``a_i = 0`` (or
+    ``w = 0``) the term is exactly zero and the problem is the undeflated one.
+    """
+
+    _scalar = True
+    _units = "(~)"
+    _print_value_fmt = "Deflation penalty: "
+    _coordinates = ""
+    _static_attrs = _Objective._static_attrs + ["_n_slots", "_power", "_reduction"]
+
+    def __init__(
+        self, thing, scales, n_slots=8, power=2, reduction="sum", name="scaled deflation"
+    ):
+        self._n_slots = int(n_slots)
+        self._power = float(power)
+        # "sum": eq. (4.4) of the deflation paper; "max": only the nearest center
+        # counts, so the excluded region stays a union of balls however many centers
+        self._reduction = reduction
+        s = np.asarray(scales, dtype=float)
+        self._inv_scale = jnp.asarray(np.where(s > 0, 1.0 / np.where(s > 0, s, 1.0), 0.0))
+        self._n_eff = jnp.asarray(float(max(np.count_nonzero(s), 1)))
+        self._centers = jnp.zeros((self._n_slots, s.size))
+        self._active = jnp.zeros(self._n_slots)
+        self._weight = jnp.asarray(0.0)
+        self._radius = jnp.asarray(1.0)
+        super().__init__(
+            things=thing, target=0, weight=1, normalize=False, normalize_target=False,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        self._dim_f = 1
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        x = self.things[0].pack_params(params)
+        diff = (x[None, :] - self._centers) * self._inv_scale[None, :]
+        d2 = jnp.sum(diff**2, axis=1) / self._n_eff + 1e-12
+        Mi = self._active * d2 ** (-self._power / 2)
+        M = jnp.max(Mi) if self._reduction == "max" else jnp.sum(Mi)
+        excess = jnp.maximum(M - self._radius ** (-self._power), 0.0)
+        return jnp.atleast_1d(self._weight * excess)
+
+
+# ---------------------------------------------------------------------------
 # Problem wrapper
 # ---------------------------------------------------------------------------
 
@@ -173,6 +239,10 @@ class ProjectedProblem:
         Default keyword arguments for local solves (``maxiter``, ``ftol``, ...).
     length_scale, alpha, current_rel, angle_scale, overrides
         Passed to :func:`perturbation_scales`.
+    deflation_slots : int
+        If > 0, a :class:`ScaledDeflation` term with this many centers is appended to
+        the objective (inactive until :meth:`set_deflation` is called). Requires a
+        single optimizable thing.
     """
 
     def __init__(
@@ -188,28 +258,60 @@ class ProjectedProblem:
         angle_scale=0.1,
         overrides=None,
         verbose=1,
+        deflation_slots=0,
+        deflation_reduction="sum",
     ):
         self.things = list(things) if isinstance(things, (list, tuple)) else [things]
         self.verbose = verbose
         t0 = time.time()
-        if not objective.built:
-            objective.build(verbose=0)
-        constraint = ObjectiveFunction(tuple(constraints))
-        constraint.build(verbose=0)
-        self.objective = objective
-        self.proj = LinearConstraintProjection(objective, constraint)
-        self.proj.build(verbose=0)
-        self.optimizer = Optimizer(local_method)
-        self.local_kwargs = dict(maxiter=100, ftol=1e-4, xtol=1e-6, gtol=1e-8)
-        self.local_kwargs.update({} if local_kwargs is None else local_kwargs)
+        # things in the order ObjectiveFunction uses (first appearance)
+        obj_things = []
+        for o in objective.objectives:
+            for t in o.things:
+                if not any(t is u for u in obj_things):
+                    obj_things.append(t)
         self.scales, self.orders = perturbation_scales(
-            self.objective.things,
+            obj_things,
             length_scale,
             alpha=alpha,
             current_rel=current_rel,
             angle_scale=angle_scale,
             overrides=overrides,
         )
+        self.deflation = None
+        if deflation_slots:
+            if len(obj_things) != 1:
+                raise ValueError("deflation needs a single optimizable thing")
+            self.deflation = ScaledDeflation(
+                obj_things[0], self.scales, deflation_slots, reduction=deflation_reduction
+            )
+            objective = ObjectiveFunction(
+                tuple(objective.objectives) + (self.deflation,)
+            )
+        if not objective.built:
+            objective.build(verbose=0)
+        # Equilibria need their self-consistency constraints (boundary vs. interior
+        # coefficients, axis, lambda gauge), as Optimizer.optimize adds them, or e.g.
+        # Rb_lmn would stay frozen while R_lmn changes. For curves, Optimizer.optimize
+        # would also fix ``shift`` and ``rotmat``; they are redundant with the Fourier
+        # coefficients, and all stage-two runs here leave them free for consistency.
+        from desc.equilibrium import Equilibrium
+        from desc.objectives.getters import maybe_add_self_consistency
+
+        constraints = tuple(constraints)
+        for t in obj_things:
+            if isinstance(t, Equilibrium):
+                constraints = maybe_add_self_consistency(t, constraints)
+        constraint = ObjectiveFunction(tuple(constraints))
+        constraint.build(verbose=0)
+        self.objective = objective
+        if not all(a is b for a, b in zip(objective.things, obj_things)):
+            raise RuntimeError("unexpected ordering of optimizable things")
+        self.proj = LinearConstraintProjection(objective, constraint)
+        self.proj.build(verbose=0)
+        self.optimizer = Optimizer(local_method)
+        self.local_kwargs = dict(maxiter=100, ftol=1e-4, xtol=1e-6, gtol=1e-8)
+        self.local_kwargs.update({} if local_kwargs is None else local_kwargs)
         self._fun = lambda z: self.proj.compute_scaled_error(z, self.proj.constants)
         self._fun_batch = jax.jit(jax.vmap(self._fun))
         self._val_and_grad = jax.jit(
@@ -275,6 +377,37 @@ class ProjectedProblem:
         if max_order is not None:
             s[self.orders > max_order] = 0.0
         return x + sigma * s * rng.standard_normal(x.size)
+
+    def distance(self, x, y):
+        """RMS distance between full vectors in units of the perturbation scales."""
+        s = self.scales
+        m = s > 0
+        return float(np.sqrt(np.mean(((np.asarray(x) - np.asarray(y))[m] / s[m]) ** 2)))
+
+    # -- deflation -------------------------------------------------------------
+    def set_deflation(self, centers, radius, weight):
+        """Deflate around ``centers`` (full vectors): penalty inside rms-radius ``radius``.
+
+        At most ``deflation_slots`` centers are used (the first ones given).
+        """
+        d = self.deflation
+        if d is None:
+            raise ValueError("problem was built without deflation_slots")
+        k = min(len(centers), d._n_slots)
+        C = np.zeros(d._centers.shape)
+        a = np.zeros(d._n_slots)
+        if k:
+            C[:k] = np.asarray(centers[:k])
+            a[:k] = 1.0
+        d._centers = jnp.asarray(C)
+        d._active = jnp.asarray(a)
+        d._radius = jnp.asarray(float(radius))
+        d._weight = jnp.asarray(float(weight))
+
+    def clear_deflation(self):
+        if self.deflation is not None:
+            self.deflation._active = jnp.zeros(self.deflation._n_slots)
+            self.deflation._weight = jnp.asarray(0.0)
 
     # -- local solve -------------------------------------------------------------
     def local_solve(self, x, **kwargs):
@@ -475,6 +608,146 @@ def basin_hopping(
             x_cur, c_cur = best_x, best_cost
             n_since_best = 0
     return _finish(problem, best_x, best_cost, history, trace, "basin_hopping", t0)
+
+
+def pool_search(
+    problem,
+    x0=None,
+    seed=0,
+    n_hops=10**6,
+    pool_size=4,
+    sigma=None,
+    sigma_bounds=(0.05, 3.0),
+    adapt_interval=4,
+    target_success=0.3,
+    adapt_factor=0.8,
+    rank_temperature=1.0,
+    deflate=True,
+    defl_radius_rel=3.0,
+    defl_strength=1.0,
+    phase1_iters=20,
+    race_factor=3.0,
+    dup_radius=0.05,
+    time_budget=np.inf,
+    **local_kwargs,
+):
+    """Deflated elite-pool basin hopping with racing.
+
+    Improves on :func:`basin_hopping` in four ways, motivated by the stage-two runs
+    (a single walker's result varied a lot between seeds, and most hops landed in much
+    worse basins) and by the deflation paper (Panici et al. 2026):
+
+    1. **Elite pool.** The ``pool_size`` best *distinct* minima are kept, and each hop
+       starts from a member chosen with probability ``~ exp(-rank / rank_temperature)``.
+       Several good basins are explored at once instead of one walker's.
+    2. **Deflated escape.** With ``deflate=True`` the kick is small and the first
+       ``phase1_iters`` iterations of the local solve are deflated around the parent
+       and the other pool members (:class:`ScaledDeflation`, radius
+       ``defl_radius_rel * sigma``). Deflation, not a large random jump, pushes the
+       iterate out of known basins, so it lands in a *neighboring* basin.
+    3. **Racing.** After phase 1, a hop whose (undeflated) cost exceeds
+       ``race_factor`` times the worst pool member is abandoned, saving the rest of
+       the solve.
+    4. **Polish.** Surviving hops are polished without deflation, so every pool member
+       is a true local minimum of the original problem. Results closer than
+       ``dup_radius`` (rms, in perturbation-scale units) to a pool member are
+       treated as the same minimum.
+
+    The kick size ``sigma`` adapts every ``adapt_interval`` hops toward a pool-entry
+    rate of ``target_success``.
+    """
+    t0 = time.time()
+    rng = np.random.default_rng(seed)
+    if deflate and problem.deflation is None:
+        raise ValueError("deflate=True needs ProjectedProblem(..., deflation_slots>0)")
+    sigma = (0.3 if deflate else 1.0) if sigma is None else sigma
+    x0 = problem.x_full() if x0 is None else np.asarray(x0)
+    history, trace = [], []
+    problem.clear_deflation()
+    res = problem.local_solve(x0, **local_kwargs)
+    pool = [(res["cost"], res["x"])]
+    recent = []  # recently found minima, also deflated
+    history.append(dict(hop=0, cost=res["cost"], x=res["x"], kind="start"))
+    _record(problem, trace, res["cost"], "hop 0")
+    if problem.verbose:
+        print(f"[pool] hop   0: cost {res['cost']:.4e}")
+    n_succ = 0
+    stats = dict(abandoned=0, duplicates=0, inserted=0)
+    maxiter = dict(problem.local_kwargs, **local_kwargs).get("maxiter", 100)
+    for k in range(1, n_hops + 1):
+        if time.time() - t0 > time_budget:
+            break
+        pool.sort(key=lambda p: p[0])
+        ranks = np.arange(len(pool))
+        w = np.exp(-ranks / rank_temperature)
+        ip = rng.choice(len(pool), p=w / w.sum())
+        c_par, x_par = pool[ip]
+        xs = problem.perturb(x_par, sigma, rng)
+        # phase 1: (deflated) partial solve
+        if deflate:
+            centers = [x_par] + [p[1] for i, p in enumerate(pool) if i != ip] + recent
+            radius = defl_radius_rel * sigma
+            weight = defl_strength * np.sqrt(2 * max(c_par, 1e-30)) * radius**2
+            problem.set_deflation(centers, radius=radius, weight=weight)
+        r1 = problem.local_solve(xs, **dict(local_kwargs, maxiter=phase1_iters))
+        problem.clear_deflation()
+        c1 = problem.cost(r1["x"]) if deflate else r1["cost"]
+        c_ref = pool[-1][0] if len(pool) >= pool_size else max(p[0] for p in pool)
+        entry = dict(hop=k, parent_rank=int(ip), sigma=sigma, phase1_cost=c1)
+        if not np.isfinite(c1) or c1 > race_factor * c_ref:
+            stats["abandoned"] += 1
+            entry.update(kind="abandoned", cost=c1)
+            history.append(entry)
+            _record(problem, trace, pool[0][0], f"hop {k}")
+            if problem.verbose:
+                print(
+                    f"[pool] hop {k:3d}: sigma {sigma:.3f} parent #{ip} "
+                    f"phase-1 cost {c1:.3e} -> abandoned   best {pool[0][0]:.4e}"
+                )
+            succ = False
+        else:
+            r2 = problem.local_solve(r1["x"], **dict(local_kwargs, maxiter=maxiter))
+            c, x = r2["cost"], r2["x"]
+            dists = [problem.distance(x, p[1]) for p in pool]
+            jmin = int(np.argmin(dists))
+            succ, kind = False, "worse"
+            if dists[jmin] < dup_radius:
+                stats["duplicates"] += 1
+                kind = "duplicate"
+                if c < pool[jmin][0]:
+                    pool[jmin] = (c, x)
+                    succ = jmin == 0
+            elif len(pool) < pool_size or c < pool[-1][0]:
+                if len(pool) >= pool_size:
+                    pool.pop()
+                pool.append((c, x))
+                stats["inserted"] += 1
+                succ, kind = True, "inserted"
+            recent = ([x] + recent)[: max(0, (problem.deflation._n_slots if deflate else 0) - pool_size)]
+            pool.sort(key=lambda p: p[0])
+            entry.update(
+                kind=kind, cost=c, x=x, dist_parent=problem.distance(x, x_par),
+                nit=r1["nit"] + r2["nit"],
+            )
+            history.append(entry)
+            _record(problem, trace, pool[0][0], f"hop {k}")
+            if problem.verbose:
+                print(
+                    f"[pool] hop {k:3d}: sigma {sigma:.3f} parent #{ip} ({c_par:.3e}) "
+                    f"phase-1 {c1:.3e} -> {c:.4e} {kind:9s} d_parent "
+                    f"{entry['dist_parent']:.2f}  best {pool[0][0]:.4e}"
+                )
+        n_succ += succ
+        if adapt_interval and k % adapt_interval == 0:
+            rate = n_succ / adapt_interval
+            sigma = sigma / adapt_factor if rate > target_success else sigma * adapt_factor
+            sigma = float(np.clip(sigma, *sigma_bounds))
+            n_succ = 0
+    best_cost, best_x = pool[0]
+    res = _finish(problem, best_x, best_cost, history, trace, "pool_search", t0)
+    res["stats"] = stats
+    res["pool_costs"] = [float(p[0]) for p in pool]
+    return res
 
 
 def cma_es(

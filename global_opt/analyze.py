@@ -29,6 +29,8 @@ COLORS = {
     "cma": "#eda100",
     "cma_lowmode": "#e87ba4",
     "basin_explore": "#eb6834",
+    "pool": "#6250d6",
+    "pool_nodefl": "#a59bef",
 }
 BASELINE_COLOR = "#7a7974"
 LABELS = {
@@ -40,6 +42,8 @@ LABELS = {
     "cma": "CMA-ES + polish",
     "cma_lowmode": "CMA-ES (\\|n\\| <= 2 subspace) + polish",
     "basin_explore": "Basin hopping from example result (1 core)",
+    "pool": "Deflated pool search (new)",
+    "pool_nodefl": "Pool search without deflation (ablation)",
 }
 STAGE1_LABELS = {
     "baseline": "Example (continuation k = 1..3)",
@@ -47,9 +51,13 @@ STAGE1_LABELS = {
     "basin": "Basin hopping",
     "basin_explore": "Basin hopping from example result (1 core)",
 }
-ORDER = ["baseline", "converged", "multistart", "basin", "noisy", "cma", "cma_lowmode"]
-GLOBAL = ["multistart", "basin", "noisy", "cma", "cma_lowmode"]
-TIGHT = ["baseline_tight", "multistart_tight", "basin_tight", "noisy_tight"]
+ORDER = [
+    "baseline", "converged", "multistart", "basin", "noisy", "cma", "cma_lowmode",
+    "pool_nodefl", "pool",
+]
+GLOBAL = ["multistart", "basin", "noisy", "cma", "cma_lowmode", "pool_nodefl", "pool"]
+IMPROVED = ["basin", "noisy", "pool_nodefl", "pool"]
+TIGHT = ["baseline_tight", "multistart_tight", "basin_tight", "noisy_tight", "pool_tight"]
 TIGHT_GLOBAL = TIGHT[1:]
 
 
@@ -147,12 +155,12 @@ def plot_convergence(
                 where="post",
                 color=color(m),
                 lw=2,
-                alpha=1.0 if i == 0 else 0.55,
+                alpha=[1.0, 0.55, 0.35][min(i, 2)],
                 label=(label(m) if i == 0 else None),
             )
             ax.plot(t[-1], c[-1], "o", ms=5, color=color(m), mec="white", mew=1.2)
     if any(len(runs.get(m, [])) > 1 for m in keys):
-        ax.plot([], [], color=BASELINE_COLOR, alpha=0.55, lw=2, label="lighter shade: seed 1")
+        ax.plot([], [], color=BASELINE_COLOR, alpha=0.55, lw=2, label="lighter shades: seeds 1, 2")
     ax.set_yscale("log")
     ax.set_xlabel("wall-clock time [min]", color="#52514e")
     ax.set_ylabel(ylabel, color="#52514e")
@@ -322,6 +330,133 @@ def stage1_table(runs):
     return "\n".join(rows)
 
 
+# ---------------------------------------------------------------------------
+# NAE-constrained equilibria
+# ---------------------------------------------------------------------------
+
+NAE_LABELS = {
+    "deflation": "Deflation (tutorial Algorithm 1)",
+    "multistart": "Multistart (shape perturbations)",
+    "defl_multistart": "Deflated multistart (new)",
+    "qs_pool": "QS-guided deflated pool (new)",
+}
+NAE_COLORS = {
+    "deflation": BASELINE_COLOR,
+    "multistart": "#2a78d6",
+    "defl_multistart": "#1baf7a",
+    "qs_pool": "#6250d6",
+}
+DELTAS = (0.01, 0.02, 0.04)
+
+
+def load_nae():
+    runs = {}
+    for f in sorted(glob.glob(os.path.join(RES, "nae", "*.json"))):
+        d = json.load(open(f))
+        d["bdry"] = np.load(f[:-5] + ".npz")["bdry"]
+        d["seed"] = d["args"]["seed"]
+        runs.setdefault(d["args"]["method"], []).append(d)
+    return runs
+
+
+def distinct_curve(run, delta):
+    """(time, number of distinct valid solutions so far): a valid solution counts if
+    its boundary coefficients differ by more than ``delta`` (L2) from every
+    solution counted before it."""
+    kept, out = [], []
+    for sol, b in zip(run["solutions"], run["bdry"]):
+        if sol["valid"] and all(np.linalg.norm(b - k) > delta for k in kept):
+            kept.append(b)
+        out.append((sol["time"], len(kept)))
+    return out
+
+
+def nae_table(runs):
+    rows = [
+        "| Method | Seed | Solutions | Valid | Distinct (δ = 0.01 / 0.02 / 0.04 m) "
+        "| s per solution | Best QS error | Median QS error | ι edge range | Best f_B(ρ=1) |",
+        "|---|---|---|---|---|---|---|---|---|---|",
+    ]
+    for m in NAE_LABELS:
+        for d in runs.get(m, []):
+            sols = d["solutions"]
+            v = [x for x in sols if x["valid"]]
+            dist = " / ".join(str(distinct_curve(d, dl)[-1][1]) for dl in DELTAS)
+            qs = [x["qs"] for x in v]
+            io = [x["iota_edge"] for x in v]
+            rows.append(
+                f"| {NAE_LABELS[m]} | {d['seed']} | {len(sols)} | {len(v)} | {dist} "
+                f"| {d['wall_time'] / max(len(sols), 1):.0f} | {min(qs):.2e} | {np.median(qs):.2e} "
+                f"| {min(io):.3f}–{max(io):.3f} | {min(x['f_B'][-1] for x in v):.2e} |"
+            )
+    return "\n".join(rows)
+
+
+def plot_nae(runs):
+    fig, axs = plt.subplots(1, 2, figsize=(11, 4.0), dpi=150)
+    for ax in axs:
+        _style(ax)
+    for m in NAE_LABELS:
+        for i, d in enumerate(runs.get(m, [])):
+            a = [1.0, 0.55, 0.35][min(i, 2)]
+            c = distinct_curve(d, 0.02)
+            t = [x[0] / 60 for x in c]
+            axs[0].step(t, [x[1] for x in c], where="post", color=NAE_COLORS[m], lw=2, alpha=a,
+                        label=NAE_LABELS[m] if i == 0 else None)
+            best, tb, cb = np.inf, [], []
+            for sol in d["solutions"]:
+                if sol["valid"] and sol["qs"] < best:
+                    best = sol["qs"]
+                if np.isfinite(best):
+                    tb.append(sol["time"] / 60)
+                    cb.append(best)
+            axs[1].step(tb, cb, where="post", color=NAE_COLORS[m], lw=2, alpha=a)
+    axs[0].set_xlabel("wall-clock time [min]", color="#52514e")
+    axs[0].set_ylabel("distinct valid equilibria (δ = 0.02 m)", color="#52514e")
+    axs[0].set_title("NAE-constrained equilibria found", loc="left", fontsize=11)
+    axs[0].legend(frameon=False, fontsize=8.5, loc="upper left")
+    axs[1].set_yscale("log")
+    axs[1].set_xlabel("wall-clock time [min]", color="#52514e")
+    axs[1].set_ylabel("lowest QS error so far (Boozer f_B, ρ = 0.5–1)", color="#52514e")
+    axs[1].set_title("Best quasisymmetry among them", loc="left", fontsize=11)
+    fig.tight_layout()
+    fig.savefig(os.path.join(FIG, "nae_search.png"))
+    plt.close(fig)
+    # diversity map
+    fig, ax = plt.subplots(figsize=(7.2, 4.4), dpi=150)
+    _style(ax)
+    for m in NAE_LABELS:
+        v = [x for d in runs.get(m, []) for x in d["solutions"] if x["valid"]]
+        if v:
+            ax.scatter([x["iota_edge"] for x in v], [x["qs"] for x in v], s=22,
+                       color=NAE_COLORS[m], edgecolor="white", lw=0.8, label=NAE_LABELS[m],
+                       zorder=3)
+    ax.set_yscale("log")
+    ax.set_xlabel("rotational transform at the edge", color="#52514e")
+    ax.set_ylabel("QS error (Boozer f_B, ρ = 0.5–1)", color="#52514e")
+    ax.set_title("Every valid NAE-constrained equilibrium found", loc="left", fontsize=11)
+    ax.legend(frameon=False, fontsize=8.5)
+    fig.tight_layout()
+    fig.savefig(os.path.join(FIG, "nae_diversity.png"))
+    plt.close(fig)
+
+
+def pool_stats_table(runs, keys):
+    rows = ["| Method | Seed | Hops | Abandoned early | Polished | Entered pool | Duplicates | Best |",
+            "|---|---|---|---|---|---|---|---|"]
+    for k in keys:
+        for d in runs.get(k, []):
+            st = d.get("pool_stats") or {}
+            hops = d.get("hops") or []
+            n = sum(1 for h in hops if h.get("hop", 0) > 0)
+            rows.append(
+                f"| {LABELS[_base(k)]} | {d['seed']} | {n} | {st.get('abandoned', 0)} "
+                f"| {n - st.get('abandoned', 0)} | {st.get('inserted', 0)} "
+                f"| {st.get('duplicates', 0)} | {d['best_cost']:.2f} |"
+            )
+    return "\n".join(rows)
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--fields", action="store_true")
@@ -349,6 +484,26 @@ def main():
         )
         if args.fields:
             stage2_fields(r2)
+        keys = [m for m in IMPROVED if m in r2]
+        if "pool" in r2:
+            plot_convergence(
+                r2,
+                os.path.join(FIG, "stage2_improved_convergence.png"),
+                base,
+                "best objective found",
+                "Stage two: deflated pool search vs. the best earlier methods",
+                keys=keys,
+            )
+            plot_minima(
+                r2,
+                os.path.join(FIG, "stage2_improved_minima.png"),
+                base,
+                "objective value of each local minimum (log)",
+                "Stage two: local minima reached (abandoned hops not shown)",
+                keys,
+            )
+            out += ["## Stage two: pool search bookkeeping", "",
+                    pool_stats_table(r2, ["pool_nodefl", "pool", "pool_tight"]), ""]
         if "baseline_tight" in r2:
             base_t = r2["baseline_tight"][0]["best_cost"]
             out += [
@@ -404,6 +559,10 @@ def main():
                 labels=STAGE1_LABELS,
                 xmax=1.0,
             )
+    rn = load_nae()
+    if rn:
+        out += ["## NAE-constrained equilibria (deflation tutorial problem)", "", nae_table(rn), ""]
+        plot_nae(rn)
     text = "\n".join(out)
     with open(os.path.join(RES, "summary.md"), "w") as f:
         f.write(text)

@@ -51,6 +51,7 @@ from desc_global import (  # noqa: E402
     basin_hopping,
     cma_es,
     multistart,
+    pool_search,
 )
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -169,7 +170,10 @@ def main():
     p.add_argument(
         "--method",
         default="baseline",
-        choices=["baseline", "converged", "multistart", "basin", "cma", "noisy"],
+        choices=[
+            "baseline", "converged", "multistart", "basin", "cma", "noisy", "pool",
+            "pool_nodefl",
+        ],
     )
     p.add_argument("--budget", type=float, default=1200.0, help="seconds")
     p.add_argument("--seed", type=int, default=0)
@@ -199,6 +203,7 @@ def main():
         length_scale=args.length_scale,
         alpha=0.5,
         current_rel=0.1,
+        deflation_slots=8 if args.method == "pool" else 0,
     )
     x0 = problem.x_full()
     print(f"initial cost {problem.cost(x0):.4e}")
@@ -264,6 +269,15 @@ def main():
             time_budget=30 if smoke else args.budget - res0["time"],
         )
         result["history"].insert(0, dict(cost=res0["cost"], x=res0["x"]))
+    elif m in ("pool", "pool_nodefl"):
+        result = pool_search(
+            problem,
+            x0=x0,
+            seed=args.seed,
+            deflate=m == "pool",
+            n_hops=2 if smoke else 10**6,
+            time_budget=30 if smoke else args.budget,
+        )
     met = metrics(problem, eq, coilset, result["x"])
     tag = f"{m}{args.tag}_seed{args.seed}" + ("_smoke" if smoke else "")
     summary = dict(
@@ -284,6 +298,15 @@ def main():
         local_minima=[
             float(h["cost"]) for h in result["history"] if "x" in h
         ],
+        abandoned=[
+            float(h["cost"]) for h in result["history"] if h.get("kind") == "abandoned"
+        ],
+        pool_stats=result.get("stats"),
+        hops=[
+            {k: (float(v) if isinstance(v, (float, np.floating)) else v)
+             for k, v in h.items() if k != "x"}
+            for h in result["history"]
+        ] if m in ("pool", "pool_nodefl") else None,
     )
     print(json.dumps({k: v for k, v in summary.items() if k != "trace"}, indent=1))
     with open(os.path.join(OUTDIR, f"{tag}.json"), "w") as f:

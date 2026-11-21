@@ -1,0 +1,744 @@
+{
+ "method": "pool_nodefl",
+ "tag": "",
+ "variant": "tutorial",
+ "free_curve_frame": false,
+ "seed": 0,
+ "sigma": 1.0,
+ "length_scale": 0.05,
+ "budget": 1200.0,
+ "wall_time": 1221.819454908371,
+ "n_local_solves": 62,
+ "nfev": 1846,
+ "ngev": 1097,
+ "best_cost": 6.665057770390303,
+ "metrics": {
+  "cost": 6.665057770390303,
+  "terms": {
+   "quadratic flux": 6.2576758498643255,
+   "coil-coil dist": 0.3847598936942889,
+   "plasma-coil dist": 0.0,
+   "curvature": 0.022622026831751022,
+   "length": 0.0
+  },
+  "Bn_over_B": 0.00024649583747942587,
+  "min_coil_coil_dist": 0.049276012290531024,
+  "min_plasma_coil_dist": 0.3952727982861451,
+  "max_curvature_normalized": 2.0001378850102207,
+  "min_curvature_normalized": -1.0040882905968334,
+  "coil_lengths": [
+   11.627016496312613,
+   7.737723689261088,
+   7.524219214856414
+  ],
+  "currents": [
+   453485.2413310118,
+   92442.50669438954,
+   215550.18906733484
+  ]
+ },
+ "trace": [
+  {
+   "time": 56.15002751350403,
+   "nlocal": 1,
+   "nfev": 77,
+   "ngev": 50,
+   "best_cost": 31.00449995138282,
+   "label": "hop 0"
+  },
+  {
+   "time": 93.28309226036072,
+   "nlocal": 3,
+   "nfev": 137,
+   "ngev": 83,
+   "best_cost": 18.45142554466942,
+   "label": "hop 1"
+  },
+  {
+   "time": 121.93093156814575,
+   "nlocal": 5,
+   "nfev": 188,
+   "ngev": 108,
+   "best_cost": 18.45142554466942,
+   "label": "hop 2"
+  },
+  {
+   "time": 137.5633888244629,
+   "nlocal": 7,
+   "nfev": 226,
+   "ngev": 121,
+   "best_cost": 18.45142554466942,
+   "label": "hop 3"
+  },
+  {
+   "time": 161.63169980049133,
+   "nlocal": 9,
+   "nfev": 273,
+   "ngev": 144,
+   "best_cost": 11.703333779071862,
+   "label": "hop 4"
+  },
+  {
+   "time": 194.91612815856934,
+   "nlocal": 11,
+   "nfev": 330,
+   "ngev": 175,
+   "best_cost": 11.703333779071862,
+   "label": "hop 5"
+  },
+  {
+   "time": 220.7736849784851,
+   "nlocal": 13,
+   "nfev": 371,
+   "ngev": 199,
+   "best_cost": 11.703333779071862,
+   "label": "hop 6"
+  },
+  {
+   "time": 234.19047284126282,
+   "nlocal": 14,
+   "nfev": 399,
+   "ngev": 211,
+   "best_cost": 11.703333779071862,
+   "label": "hop 7"
+  },
+  {
+   "time": 366.7053189277649,
+   "nlocal": 16,
+   "nfev": 545,
+   "ngev": 333,
+   "best_cost": 10.50454179183431,
+   "label": "hop 8"
+  },
+  {
+   "time": 413.0945146083832,
+   "nlocal": 18,
+   "nfev": 610,
+   "ngev": 374,
+   "best_cost": 10.50454179183431,
+   "label": "hop 9"
+  },
+  {
+   "time": 437.4451906681061,
+   "nlocal": 20,
+   "nfev": 658,
+   "ngev": 395,
+   "best_cost": 10.50454179183431,
+   "label": "hop 10"
+  },
+  {
+   "time": 498.6868271827698,
+   "nlocal": 22,
+   "nfev": 741,
+   "ngev": 451,
+   "best_cost": 10.50454179183431,
+   "label": "hop 11"
+  },
+  {
+   "time": 529.4264400005341,
+   "nlocal": 24,
+   "nfev": 786,
+   "ngev": 479,
+   "best_cost": 10.50454179183431,
+   "label": "hop 12"
+  },
+  {
+   "time": 545.7143864631653,
+   "nlocal": 25,
+   "nfev": 814,
+   "ngev": 493,
+   "best_cost": 10.50454179183431,
+   "label": "hop 13"
+  },
+  {
+   "time": 571.7431483268738,
+   "nlocal": 27,
+   "nfev": 859,
+   "ngev": 517,
+   "best_cost": 10.50454179183431,
+   "label": "hop 14"
+  },
+  {
+   "time": 594.4770538806915,
+   "nlocal": 28,
+   "nfev": 890,
+   "ngev": 538,
+   "best_cost": 10.50454179183431,
+   "label": "hop 15"
+  },
+  {
+   "time": 615.6925282478333,
+   "nlocal": 30,
+   "nfev": 930,
+   "ngev": 557,
+   "best_cost": 10.50454179183431,
+   "label": "hop 16"
+  },
+  {
+   "time": 635.8992784023285,
+   "nlocal": 32,
+   "nfev": 969,
+   "ngev": 574,
+   "best_cost": 10.50454179183431,
+   "label": "hop 17"
+  },
+  {
+   "time": 667.328102350235,
+   "nlocal": 34,
+   "nfev": 1021,
+   "ngev": 603,
+   "best_cost": 10.50454179183431,
+   "label": "hop 18"
+  },
+  {
+   "time": 689.9475817680359,
+   "nlocal": 35,
+   "nfev": 1055,
+   "ngev": 624,
+   "best_cost": 10.50454179183431,
+   "label": "hop 19"
+  },
+  {
+   "time": 717.5147047042847,
+   "nlocal": 37,
+   "nfev": 1094,
+   "ngev": 648,
+   "best_cost": 6.665057770390303,
+   "label": "hop 20"
+  },
+  {
+   "time": 735.9870290756226,
+   "nlocal": 38,
+   "nfev": 1124,
+   "ngev": 664,
+   "best_cost": 6.665057770390303,
+   "label": "hop 21"
+  },
+  {
+   "time": 759.6527864933014,
+   "nlocal": 39,
+   "nfev": 1162,
+   "ngev": 685,
+   "best_cost": 6.665057770390303,
+   "label": "hop 22"
+  },
+  {
+   "time": 782.9542298316956,
+   "nlocal": 40,
+   "nfev": 1191,
+   "ngev": 706,
+   "best_cost": 6.665057770390303,
+   "label": "hop 23"
+  },
+  {
+   "time": 809.6633493900299,
+   "nlocal": 42,
+   "nfev": 1236,
+   "ngev": 731,
+   "best_cost": 6.665057770390303,
+   "label": "hop 24"
+  },
+  {
+   "time": 829.991534948349,
+   "nlocal": 43,
+   "nfev": 1267,
+   "ngev": 750,
+   "best_cost": 6.665057770390303,
+   "label": "hop 25"
+  },
+  {
+   "time": 852.5001366138458,
+   "nlocal": 45,
+   "nfev": 1310,
+   "ngev": 768,
+   "best_cost": 6.665057770390303,
+   "label": "hop 26"
+  },
+  {
+   "time": 897.1527860164642,
+   "nlocal": 47,
+   "nfev": 1373,
+   "ngev": 807,
+   "best_cost": 6.665057770390303,
+   "label": "hop 27"
+  },
+  {
+   "time": 915.4209997653961,
+   "nlocal": 48,
+   "nfev": 1405,
+   "ngev": 823,
+   "best_cost": 6.665057770390303,
+   "label": "hop 28"
+  },
+  {
+   "time": 1013.6620466709137,
+   "nlocal": 50,
+   "nfev": 1526,
+   "ngev": 916,
+   "best_cost": 6.665057770390303,
+   "label": "hop 29"
+  },
+  {
+   "time": 1036.2820417881012,
+   "nlocal": 51,
+   "nfev": 1561,
+   "ngev": 936,
+   "best_cost": 6.665057770390303,
+   "label": "hop 30"
+  },
+  {
+   "time": 1045.7011737823486,
+   "nlocal": 52,
+   "nfev": 1581,
+   "ngev": 944,
+   "best_cost": 6.665057770390303,
+   "label": "hop 31"
+  },
+  {
+   "time": 1057.914442539215,
+   "nlocal": 53,
+   "nfev": 1606,
+   "ngev": 955,
+   "best_cost": 6.665057770390303,
+   "label": "hop 32"
+  },
+  {
+   "time": 1088.9635879993439,
+   "nlocal": 55,
+   "nfev": 1653,
+   "ngev": 985,
+   "best_cost": 6.665057770390303,
+   "label": "hop 33"
+  },
+  {
+   "time": 1104.5683236122131,
+   "nlocal": 56,
+   "nfev": 1679,
+   "ngev": 1000,
+   "best_cost": 6.665057770390303,
+   "label": "hop 34"
+  },
+  {
+   "time": 1123.1012365818024,
+   "nlocal": 58,
+   "nfev": 1719,
+   "ngev": 1017,
+   "best_cost": 6.665057770390303,
+   "label": "hop 35"
+  },
+  {
+   "time": 1162.1163365840912,
+   "nlocal": 60,
+   "nfev": 1770,
+   "ngev": 1051,
+   "best_cost": 6.665057770390303,
+   "label": "hop 36"
+  },
+  {
+   "time": 1216.1893284320831,
+   "nlocal": 62,
+   "nfev": 1845,
+   "ngev": 1097,
+   "best_cost": 6.665057770390303,
+   "label": "hop 37"
+  }
+ ],
+ "local_minima": [
+  31.00449995138282,
+  18.45142554466942,
+  28.86820457255785,
+  22.533080576724466,
+  11.703333779071862,
+  17.207947780044243,
+  16.583302193614013,
+  10.50454179183431,
+  11.72532384403468,
+  48.707203218586656,
+  12.201164424027972,
+  10.580008485670223,
+  32.11719540139496,
+  10.73873055759761,
+  17.294760271063716,
+  13.824925377729265,
+  6.665057770390303,
+  11.885357211376189,
+  7.900083190730218,
+  7.829637280336229,
+  11.269818092895013,
+  9.365952952214561,
+  10.535218180345613,
+  7.5606525379783545,
+  8.27984110213672
+ ],
+ "abandoned": [
+  105.69087698271721,
+  68.3479071189092,
+  73.96107897500872,
+  69.97892395228627,
+  50.83732526174445,
+  37.537477335020455,
+  121.64697042520223,
+  51.67152657150729,
+  32.853476228476374,
+  49.70650119883543,
+  368.3283360564986,
+  223.6437615770684,
+  57.461639245613
+ ],
+ "pool_stats": {
+  "abandoned": 13,
+  "duplicates": 0,
+  "inserted": 16
+ },
+ "hops": [
+  {
+   "hop": 0,
+   "cost": 31.00449995138282,
+   "kind": "start"
+  },
+  {
+   "hop": 1,
+   "parent_rank": 0,
+   "sigma": 1.0,
+   "phase1_cost": 19.842111835402918,
+   "kind": "inserted",
+   "cost": 18.45142554466942,
+   "dist_parent": 2.2484331527299424,
+   "nit": 32
+  },
+  {
+   "hop": 2,
+   "parent_rank": 0,
+   "sigma": 1.0,
+   "phase1_cost": 29.20531244820514,
+   "kind": "inserted",
+   "cost": 28.86820457255785,
+   "dist_parent": 3.742558714401217,
+   "nit": 23
+  },
+  {
+   "hop": 3,
+   "parent_rank": 0,
+   "sigma": 1.0,
+   "phase1_cost": 22.533080576724466,
+   "kind": "inserted",
+   "cost": 22.533080576724466,
+   "dist_parent": 2.302379175264895,
+   "nit": 12
+  },
+  {
+   "hop": 4,
+   "parent_rank": 0,
+   "sigma": 1.0,
+   "phase1_cost": 11.703535794063258,
+   "kind": "inserted",
+   "cost": 11.703333779071862,
+   "dist_parent": 2.129158002976139,
+   "nit": 21
+  },
+  {
+   "hop": 5,
+   "parent_rank": 1,
+   "sigma": 1.25,
+   "phase1_cost": 19.35907810975587,
+   "kind": "inserted",
+   "cost": 17.207947780044243,
+   "dist_parent": 2.3055082752955185,
+   "nit": 29
+  },
+  {
+   "hop": 6,
+   "parent_rank": 0,
+   "sigma": 1.25,
+   "phase1_cost": 16.585290695132567,
+   "kind": "inserted",
+   "cost": 16.583302193614013,
+   "dist_parent": 9.92863466651925,
+   "nit": 22
+  },
+  {
+   "hop": 7,
+   "parent_rank": 0,
+   "sigma": 1.25,
+   "phase1_cost": 105.69087698271721,
+   "kind": "abandoned",
+   "cost": 105.69087698271721
+  },
+  {
+   "hop": 8,
+   "parent_rank": 1,
+   "sigma": 1.25,
+   "phase1_cost": 15.127200802003617,
+   "kind": "inserted",
+   "cost": 10.50454179183431,
+   "dist_parent": 4.453143379265761,
+   "nit": 120
+  },
+  {
+   "hop": 9,
+   "parent_rank": 0,
+   "sigma": 1.5625,
+   "phase1_cost": 12.244654626867693,
+   "kind": "inserted",
+   "cost": 11.72532384403468,
+   "dist_parent": 3.1568406287127972,
+   "nit": 39
+  },
+  {
+   "hop": 10,
+   "parent_rank": 0,
+   "sigma": 1.5625,
+   "phase1_cost": 48.821461153443636,
+   "kind": "worse",
+   "cost": 48.707203218586656,
+   "dist_parent": 7.6949353748851275,
+   "nit": 19
+  },
+  {
+   "hop": 11,
+   "parent_rank": 0,
+   "sigma": 1.5625,
+   "phase1_cost": 24.243492751273283,
+   "kind": "inserted",
+   "cost": 12.201164424027972,
+   "dist_parent": 4.07342895272836,
+   "nit": 55
+  },
+  {
+   "hop": 12,
+   "parent_rank": 0,
+   "sigma": 1.5625,
+   "phase1_cost": 10.666050369279182,
+   "kind": "inserted",
+   "cost": 10.580008485670223,
+   "dist_parent": 2.988980194321153,
+   "nit": 26
+  },
+  {
+   "hop": 13,
+   "parent_rank": 1,
+   "sigma": 1.953125,
+   "phase1_cost": 68.3479071189092,
+   "kind": "abandoned",
+   "cost": 68.3479071189092
+  },
+  {
+   "hop": 14,
+   "parent_rank": 1,
+   "sigma": 1.953125,
+   "phase1_cost": 32.18502893322325,
+   "kind": "worse",
+   "cost": 32.11719540139496,
+   "dist_parent": 5.930081137652955,
+   "nit": 22
+  },
+  {
+   "hop": 15,
+   "parent_rank": 0,
+   "sigma": 1.953125,
+   "phase1_cost": 73.96107897500872,
+   "kind": "abandoned",
+   "cost": 73.96107897500872
+  },
+  {
+   "hop": 16,
+   "parent_rank": 0,
+   "sigma": 1.953125,
+   "phase1_cost": 10.73873055759761,
+   "kind": "inserted",
+   "cost": 10.73873055759761,
+   "dist_parent": 3.889171933752974,
+   "nit": 18
+  },
+  {
+   "hop": 17,
+   "parent_rank": 0,
+   "sigma": 1.5625,
+   "phase1_cost": 17.294760271063716,
+   "kind": "worse",
+   "cost": 17.294760271063716,
+   "dist_parent": 3.762364278229207,
+   "nit": 16
+  },
+  {
+   "hop": 18,
+   "parent_rank": 3,
+   "sigma": 1.5625,
+   "phase1_cost": 14.170256273868949,
+   "kind": "worse",
+   "cost": 13.824925377729265,
+   "dist_parent": 2.519366504090528,
+   "nit": 27
+  },
+  {
+   "hop": 19,
+   "parent_rank": 0,
+   "sigma": 1.5625,
+   "phase1_cost": 69.97892395228627,
+   "kind": "abandoned",
+   "cost": 69.97892395228627
+  },
+  {
+   "hop": 20,
+   "parent_rank": 0,
+   "sigma": 1.5625,
+   "phase1_cost": 6.6726460867417074,
+   "kind": "inserted",
+   "cost": 6.665057770390303,
+   "dist_parent": 7.93500843693189,
+   "nit": 22
+  },
+  {
+   "hop": 21,
+   "parent_rank": 0,
+   "sigma": 1.25,
+   "phase1_cost": 50.83732526174445,
+   "kind": "abandoned",
+   "cost": 50.83732526174445
+  },
+  {
+   "hop": 22,
+   "parent_rank": 2,
+   "sigma": 1.25,
+   "phase1_cost": 37.537477335020455,
+   "kind": "abandoned",
+   "cost": 37.537477335020455
+  },
+  {
+   "hop": 23,
+   "parent_rank": 0,
+   "sigma": 1.25,
+   "phase1_cost": 121.64697042520223,
+   "kind": "abandoned",
+   "cost": 121.64697042520223
+  },
+  {
+   "hop": 24,
+   "parent_rank": 0,
+   "sigma": 1.25,
+   "phase1_cost": 11.898698898464772,
+   "kind": "worse",
+   "cost": 11.885357211376189,
+   "dist_parent": 5.2318075603698295,
+   "nit": 23
+  },
+  {
+   "hop": 25,
+   "parent_rank": 0,
+   "sigma": 1.0,
+   "phase1_cost": 51.67152657150729,
+   "kind": "abandoned",
+   "cost": 51.67152657150729
+  },
+  {
+   "hop": 26,
+   "parent_rank": 0,
+   "sigma": 1.0,
+   "phase1_cost": 7.900083190730218,
+   "kind": "inserted",
+   "cost": 7.900083190730218,
+   "dist_parent": 3.126968968149119,
+   "nit": 17
+  },
+  {
+   "hop": 27,
+   "parent_rank": 1,
+   "sigma": 1.0,
+   "phase1_cost": 10.204491530082137,
+   "kind": "inserted",
+   "cost": 7.829637280336229,
+   "dist_parent": 1.8834043398853637,
+   "nit": 38
+  },
+  {
+   "hop": 28,
+   "parent_rank": 1,
+   "sigma": 1.0,
+   "phase1_cost": 32.853476228476374,
+   "kind": "abandoned",
+   "cost": 32.853476228476374
+  },
+  {
+   "hop": 29,
+   "parent_rank": 3,
+   "sigma": 1.25,
+   "phase1_cost": 28.82939650681122,
+   "kind": "worse",
+   "cost": 11.269818092895013,
+   "dist_parent": 4.896170381529346,
+   "nit": 91
+  },
+  {
+   "hop": 30,
+   "parent_rank": 1,
+   "sigma": 1.25,
+   "phase1_cost": 49.70650119883543,
+   "kind": "abandoned",
+   "cost": 49.70650119883543
+  },
+  {
+   "hop": 31,
+   "parent_rank": 1,
+   "sigma": 1.25,
+   "phase1_cost": 368.3283360564986,
+   "kind": "abandoned",
+   "cost": 368.3283360564986
+  },
+  {
+   "hop": 32,
+   "parent_rank": 1,
+   "sigma": 1.25,
+   "phase1_cost": 223.6437615770684,
+   "kind": "abandoned",
+   "cost": 223.6437615770684
+  },
+  {
+   "hop": 33,
+   "parent_rank": 0,
+   "sigma": 1.0,
+   "phase1_cost": 9.615339566605213,
+   "kind": "inserted",
+   "cost": 9.365952952214561,
+   "dist_parent": 3.4908944994180424,
+   "nit": 28
+  },
+  {
+   "hop": 34,
+   "parent_rank": 0,
+   "sigma": 1.0,
+   "phase1_cost": 57.461639245613,
+   "kind": "abandoned",
+   "cost": 57.461639245613
+  },
+  {
+   "hop": 35,
+   "parent_rank": 0,
+   "sigma": 1.0,
+   "phase1_cost": 10.535218180345613,
+   "kind": "worse",
+   "cost": 10.535218180345613,
+   "dist_parent": 3.903625802064507,
+   "nit": 16
+  },
+  {
+   "hop": 36,
+   "parent_rank": 0,
+   "sigma": 1.0,
+   "phase1_cost": 9.690523993008197,
+   "kind": "inserted",
+   "cost": 7.5606525379783545,
+   "dist_parent": 3.5563153213659287,
+   "nit": 32
+  },
+  {
+   "hop": 37,
+   "parent_rank": 1,
+   "sigma": 1.25,
+   "phase1_cost": 9.222153756582518,
+   "kind": "worse",
+   "cost": 8.27984110213672,
+   "dist_parent": 6.3932929826078375,
+   "nit": 45
+  }
+ ]
+}

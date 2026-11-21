@@ -23,119 +23,134 @@ coil problem, and its ideas were applied to the NAE-constrained problem.
 
 All runs were made on 4 CPU cores (no GPU) with DESC master at commit `d644e62`.
 
+> **Correction (21 November 2026).** Earlier versions of this README compared the
+> stage-two results with a tutorial result of 197.9 and reported an 84×
+> improvement. That baseline was wrong. My wrapper left each coil's rotation
+> matrix and shift free, while DESC's `Optimizer` fixes them (`FixCurveRotation`,
+> `FixCurveShift`). They are redundant with the Fourier coefficients, so they don't
+> change which coils can be reached. They do change the local solver's path, and
+> from circular coils the free-frame solve stops in a much worse minimum. With
+> them fixed, now the default, the tutorial's single solve ends at **31.0**. That
+> matches the notebook's own output (`4.516e+06 --> 3.100e+01`). Every stage-two
+> number in this README now uses the fixed frame; the improvement is about 14×,
+> not 84×. The free-frame runs are kept in `results/stage2/` and summarized in
+> [Earlier runs with the coil frame free](#earlier-runs-with-the-coil-frame-free).
+
 ## Results in brief
 
-* **Stage two: global search finds far better coils.** The tutorial's single
-  `lsq-exact` solve stops at cost **197.9**, and so does the same solve run to
-  tight tolerances (197.87). That's a genuine local minimum, not an unconverged
-  solve. Every global method beat it within 20 minutes on 3 CPU cores. The best,
-  basin hopping, reached **2.37 (84× lower)**, with ⟨|B·n|⟩/⟨|B|⟩ =
-  1.6e-4 instead of 9.2e-4. In the first round, the annealed noisy gradient was the
-  most consistent method (4.4, 5.7 and 9.0 on its three seeds).
-* **Round two: deflated pool search is consistently best on the coil problem.**
-  It combines a pool of the best minima, small kicks with a deflated escape
-  phase, and early abandonment of poor hops. Its three seeds ended at 2.37, 3.55
-  and 2.51; the worst is better than the worst seed of basin hopping
-  (12.4) and the noisy gradient (9.0). Without deflation the same
-  search ended at 11.0 and 4.4.
+* **Stage two: global search finds coils about 14× better than the tutorial's.**
+  The tutorial's single `lsq-exact` solve ends at cost **31.0**. The same solve
+  run to tolerances of 1e-10 also ends at 31.0, so it's a genuine local minimum,
+  not an unconverged solve. Deflated pool search reached **2.21 (14× lower)** in
+  20 minutes on 3 CPU cores, with ⟨|B·n|⟩/⟨|B|⟩ = 1.5e-4 instead of 3.7e-4.
+* **Deflated pool search is the most consistent method.** It combines a pool of
+  the best minima, small kicks with a deflated escape phase, and early
+  abandonment of poor hops. Its three seeds ended at 2.96, 2.21 and 2.51. Basin
+  hopping ended at 5.91, 5.74 and 2.44, and the annealed noisy gradient at 8.8,
+  16.3 and 23.5. Without deflation, the same pool search ended at 6.7 on both
+  seeds.
+* **Not just looser coils.** The better coils are longer (up to 11.4 m against
+  7.8 m) and closer together (5–6 cm against 10.5 cm), which the tutorial's
+  bounds allow. Bounding the coil–coil distance and coil length at the tutorial
+  result's own values (0.105 m, 7.8 m), a single solve ends at
+  31.0. Deflated pool search reaches **9.10 (3.4× lower)** within those
+  bounds, and basin hopping 14.24.
 * **NAE-constrained equilibria: different tools for different goals.** The
   tutorial's deflation spreads its solutions widest, but it stalls after about 55
   because its product-form operator overflows float64. A QS-guided deflated pool
   finds NAE-constrained equilibria with 2–2.5 times lower outer-volume QS error
   (best 3.9e-3 against 9.6e-3), and its whole population is 2.4 times better at
   the median.
-* **Not just loose bounds.** The tutorial allows coils up to ~20 m long and as
-  close as 5 cm, and the better minima use that freedom. So every method was
-  rerun with **tight bounds** set to the tutorial result's own values: coil-coil
-  distance ≥ 0.14 m, every coil ≤ 7 m. A single solve still ends at 197.9.
-  Basin hopping reaches 54.5 (3.6× lower), and deflated pool search reaches
-  **29.1 (6.8× lower)**, with ⟨|B·n|⟩/⟨|B|⟩ = 2.7e-4.
 * **Stage one: smaller but real gains.** Against the example's continuation
   result (2.02e-4), multistart and basin hopping from scratch reach 1.39–1.43e-4
   (~30 % lower). Basin hopping started from the example's result reaches
   **1.16e-4 (43 % lower)**. The gain is almost entirely in the QS error; aspect
   ratio and ι stay on target.
-* **Use deflated pool search (or basin hopping / the noisy gradient), not CMA-ES.** CMA-ES worked poorly
-  in the ~190-dimensional coil space (54.9, or 35.8 restricted to |n| ≤ 2 modes).
-  The methods built on DESC's exact-Jacobian local solver win.
+* **Use deflated pool search, not CMA-ES.** In the earlier free-frame runs, CMA-ES
+  did worst of all the global methods (54.9, or 35.8 restricted to |n| ≤ 2
+  modes, while the others reached 2.4–16). The methods built on DESC's
+  exact-Jacobian local solver win.
 
 ## Stage two: precise QA coils (tutorial problem)
 
 Every global run had the same 20-minute wall-clock budget on the same 3 cores.
-"Local solves" counts the `lsq-exact` solves, each ~30–40 s. The objective is
-the tutorial's, unchanged: cost = ½‖weighted residuals‖². In the better minima
-it's almost entirely the quadratic-flux term.
+Each coil's rotation and shift are fixed, as `Optimizer.optimize` does. The
+objective is the tutorial's, unchanged: cost = ½‖weighted residuals‖². In the
+better minima it's almost entirely the quadratic-flux term. "Local solves"
+counts calls to `lsq-exact` (15–40 s each); a pool-search hop makes two, the
+deflated phase and the polish.
 
-| Method | Seed | Best cost | ⟨\|B·n\|⟩/⟨\|B\|⟩ | Min coil-coil [m] | Coil lengths [m] | Local solves |
+| Method | Seed | Best cost | ⟨\|B·n\|⟩/⟨\|B\|⟩ | Min coil-coil [m] | Longest coil [m] | Local solves |
 |---|---|---|---|---|---|---|
-| Tutorial (single `lsq-exact`) | – | 197.88 | 9.16e-4 | 0.144 | 6.97, 5.42, 5.52 | 1 |
-| Same start, tolerances 1e-10 | – | 197.87 | 9.16e-4 | 0.144 | 6.97, 5.42, 5.52 | 1 |
-| Multistart | 0 / 1 | 16.43 / 14.10 | 3.9e-4 / 2.9e-4 | 0.051 / 0.096 | ≤ 10.8 / ≤ 8.7 | 33 / 31 |
-| Basin hopping | 0 / 1 | 12.38 / **2.37** | 3.2e-4 / **1.6e-4** | 0.050 / 0.051 | ≤ 11.5 / ≤ 12.3 | 31 / 33 |
-| Annealed noisy gradient | 0 / 1 | 4.41 / 5.68 | 1.9e-4 / 1.9e-4 | 0.059 / 0.073 | ≤ 10.1 / ≤ 9.5 | 17 / 13 |
-| CMA-ES + polish | 0 | 54.88 | 1.0e-3 | 0.051 | ≤ 12.4 | 4 |
-| CMA-ES on \|n\| ≤ 2 modes + polish | 0 | 35.77 | 5.5e-4 | 0.050 | ≤ 10.3 | 4 |
-
-A third seed of basin hopping and the noisy gradient, run later for the
-round-two comparison, ended at 2.91 and 8.97 (see Round two).
+| Tutorial (single `lsq-exact`) | – | 31.00 | 3.66e-4 | 0.105 | 7.79 | 1 |
+| Same start, tolerances 1e-10 | – | 31.00 | 3.66e-4 | 0.105 | 7.79 | 1 |
+| Basin hopping | 0 / 1 / 2 | 5.91 / 5.74 / 2.44 | 2.3e-4 / 2.1e-4 / 1.6e-4 | 0.052 / 0.051 / 0.051 | 11.2 / 10.5 / 11.1 | 39 / 37 / 32 |
+| Annealed noisy gradient | 0 / 1 / 2 | 8.79 / 16.27 / 23.45 | 2.3e-4 / 2.8e-4 / 3.4e-4 | 0.077 / 0.051 / 0.057 | 8.7 / 8.3 / 8.1 | 20 / 21 / 28 |
+| Pool search without deflation (ablation) | 0 / 1 | 6.67 / 6.72 | 2.5e-4 / 2.0e-4 | 0.049 / 0.070 | 11.6 / 9.0 | 62 / 53 |
+| **Deflated pool search** | 0 / 1 / 2 | 2.96 / **2.21** / 2.51 | 1.5e-4 / **1.5e-4** / 1.5e-4 | 0.063 / 0.057 / 0.063 | 10.3 / 11.4 / 10.6 | 70 / 60 / 49 |
 
 Full per-term breakdown, curvature, plasma-coil distance and timings are in
 [`results/summary.md`](results/summary.md).
 
-![Stage two convergence](figures/stage2_convergence.png)
+![Stage two convergence](figures/stage2_fixed_convergence.png)
 
-![Stage two local minima](figures/stage2_local_minima.png)
+![Stage two local minima](figures/stage2_fixed_local_minima.png)
 
-![Stage two B.n and coils](figures/stage2_Bn_and_coils.png)
+![Stage two B.n and coils](figures/stage2_fixed_Bn_and_coils.png)
 
 What these show:
 
-* **The landscape is very rugged.** Multistart's 64 local minima (two seeds)
-  span 14 to 3000. Only about half beat the tutorial result, and the median is
-  ~180. A single local solve from circular coils lands in one of these at
-  random.
-* **Good minima cluster.** Perturbing a good minimum and re-solving (basin
-  hopping) gives lower minima than restarting from the initial guess: median
-  41–63 vs 147–220 for multistart.
-* **Langevin excursions work well.** The noisy-gradient excursions follow
-  low-cost valleys instead of jumping isotropically. Their minima have medians
-  of 14–33, and both seeds ended below 6, using only 13–17 local solves.
-* **CMA-ES is a poor fit here.** Its generations of ~20 random samples in ~190
-  dimensions rarely beat a local minimum of this narrow-valleyed objective.
-  Searching only the |n| ≤ 2 modes helps, but it still loses to the methods that
-  call the exact-Jacobian local solver.
-* **Seed scatter is large.** Basin hopping got 12.4 on one seed and 2.4 on the
-  other, so a single 20-minute run is one draw. If you have the hardware, run
-  several seeds in parallel and keep the best.
+* **The landscape is rugged.** Basin hopping's 105 local minima span 2.4 to
+  5800, and only 59 % beat the tutorial's 31.0. A single solve from circular
+  coils lands in one of these minima, more or less at random.
+* **Good minima cluster.** Restarting near a good minimum beats restarting
+  far from it. Every one of pool search's 83 polished minima beat the tutorial
+  (median 4.1), against a median of 18.9 for basin hopping, whose kicks are
+  larger.
+* **One run is one draw, except for pool search.** Basin hopping ended between
+  2.44 and 5.91 depending on the seed, and the noisy gradient between 8.8 and
+  23.5. Pool search's three seeds all ended between 2.21 and 2.96.
+* **The noisy gradient did not hold up.** With the frame free it was the most
+  consistent first-round method (4.4, 5.7 and 9.0). With the frame fixed, its
+  seeds ended at 8.8, 16.3 and 23.5, and only 32 % of its minima beat the
+  tutorial. I haven't isolated why. Its Adam excursions move through all the
+  projected variables, and with the frame free those included 36 redundant ones;
+  that is one candidate.
 
-### Same problem with tight distance/length bounds
+### Same problem with bounds matched to the tutorial result
 
-The better minima above lengthen the coils (up to ~12 m vs 7 m) and push the
-coil-coil distance down to the tutorial's bound (5 cm vs 14 cm). Both are
-allowed by the tutorial's objective, but you may not want them. In
-`--variant tight` the bounds are the tutorial result's own values: coil-coil
-≥ 0.14 m and every coil ≤ 7 m. The tutorial result is therefore feasible, with
-the same cost.
+The better minima lengthen the coils (up to 11.4 m against 7.8 m) and push the
+coil-coil distance down to the tutorial's bound (5–6 cm against 10.5 cm). The
+tutorial's objective allows both, but you may not want them. `--variant matched`
+sets those bounds to the tutorial result's own values: coil-coil distance
+≥ 0.105 m and every coil ≤ 7.8 m. The tutorial's result therefore stays
+feasible, with the same cost.
 
-| Method | Seed | Best cost | Quadratic-flux term | ⟨\|B·n\|⟩/⟨\|B\|⟩ | Min coil-coil [m] | Coil lengths [m] | Local solves |
-|---|---|---|---|---|---|---|---|
-| Single `lsq-exact` (tutorial procedure) | – | 197.88 | 197.87 | 9.16e-4 | 0.144 | 6.97, 5.42, 5.52 | 1 |
-| Multistart | 0 | 69.96 | 67.22 | 4.9e-4 | 0.138 | 7.06, 6.05, 6.94 | 32 |
-| Basin hopping | 0 | **54.48** | 51.98 | **4.2e-4** | 0.137 | 7.05, 6.22, 6.96 | 31 |
-| Annealed noisy gradient | 0 | 68.49 | 65.87 | 4.7e-4 | 0.137 | 7.05, 6.37, 6.18 | 17 |
+| Method | Seed | Best cost | ⟨\|B·n\|⟩/⟨\|B\|⟩ | Min coil-coil [m] | Coil lengths [m] | Local solves |
+|---|---|---|---|---|---|---|
+| Single `lsq-exact` (tutorial procedure) | – | 31.00 | 3.66e-4 | 0.105 | 7.79, 6.24, 6.12 | 1 |
+| Basin hopping | 0 | 14.24 | 2.56e-4 | 0.105 | 7.81, 6.64, 6.80 | 32 |
+| **Deflated pool search** | 0 | 9.10 | 1.92e-4 | 0.105 | 7.81, 7.16, 7.33 | 68 |
 
-![Stage two tight convergence](figures/stage2_tight_convergence.png)
+![Stage two, matched bounds, convergence](figures/stage2_fixed_matched_convergence.png)
 
-![Stage two tight B.n and coils](figures/stage2_tight_Bn_and_coils.png)
+![Stage two, matched bounds, B.n and coils](figures/stage2_fixed_matched_Bn_and_coils.png)
 
-The gain shrinks from ~80× to ~3–4×, but it is still large: ⟨|B·n|⟩/⟨|B|⟩ falls
-2.2×. The bounds are soft penalties, as in the tutorial, so the minima sit just
-past them (0.137 m instead of 0.14 m, 7.05 m instead of 7 m). Raise those terms'
-weights if they must hold exactly.
+Within the tutorial result's own spacing and length, deflated pool search still
+reaches **9.10**, 3.4 times lower than the single solve (31.0), and basin hopping
+reaches 14.24. ⟨|B·n|⟩/⟨|B|⟩ falls 1.9× (3.7e-4 to 1.9e-4). So the gain shrinks
+from 14× to 3.4× once the coils can't grow longer or closer, but a real gain
+remains. The best coils keep the tutorial's overall layout. The bounds are soft
+penalties, as in the tutorial, so the minima sit just past them (0.1047 m instead
+of 0.105 m, 7.81 m instead of 7.8 m). Raise those terms' weights if they must hold
+exactly.
 
 ## Round two: deflated pool search
 
 ### What the first round and the deflation paper suggested
+
+The first round ran with the coil frame free (see the correction above), so its
+numbers differ, but the lessons hold with the frame fixed.
 
 * **Seed scatter.** One basin-hopping walker ended at 12.4 or 2.4 depending on
   the seed. A single walker is one draw.
@@ -171,37 +186,59 @@ objectives are pytrees, so these are dynamic leaves: changing them between solve
 does not recompile anything, and with zero weight the term contributes exactly
 nothing.
 
-### Results: 20 minutes per run on the same 3 cores
+### Results
 
-| Method | Seed 0 | Seed 1 | Seed 2 | Worst seed |
-|---|---|---|---|---|
-| Multistart | 16.43 | 14.10 | – | 16.43 |
-| Basin hopping | 12.38 | 2.37 | 2.91 | 12.38 |
-| Annealed noisy gradient | 4.41 | 5.68 | 8.97 | 8.97 |
-| CMA-ES + polish | 54.88 | – | – | 54.88 |
-| Pool search without deflation (ablation) | 10.99 | 4.44 | – | 10.99 |
-| **Deflated pool search** | **2.37** | **3.55** | **2.51** | **3.55** |
+| Run | Seed | Hops | Abandoned early | Polished | Entered pool | Best cost |
+|---|---|---|---|---|---|---|
+| Pool search without deflation | 0 / 1 | 37 / 29 | 13 / 6 | 24 / 23 | 16 / 14 | 6.67 / 6.72 |
+| **Deflated pool search** | 0 / 1 / 2 | 38 / 31 / 24 | 7 / 3 / 0 | 31 / 28 / 24 | 21 / 17 / 15 | 2.96 / 2.21 / 2.51 |
+| Deflated pool search, matched bounds | 0 | 34 | 1 | 33 | 16 | 9.10 |
 
-![Pool search vs. the best earlier methods](figures/stage2_improved_convergence.png)
-
-* **Consistent.** All three seeds ended between 2.37 and 3.55, with
-  ⟨|B·n|⟩/⟨|B|⟩ = 1.6–1.8e-4. The best result equals the best single run of the
-  first round (2.37), and the worst seed beats the worst seed of every earlier
-  method. Basin hopping can do as well on a good seed (2.37 and 2.91 on two of
-  its three), but not reliably: its third seed ended at 12.4.
+* **Consistent.** All three seeds ended between 2.21 and 2.96, with
+  ⟨|B·n|⟩/⟨|B|⟩ = 1.5e-4. The worst seed beats every seed of the noisy gradient
+  and of the ablation, and two of basin hopping's three.
 * **Deflation is what makes it work.** With deflation off (and the larger
-  basin-hopping kicks), the same pool-and-racing search ended at 11.0 and 4.4.
-  Deflated hops started from kicks of only 0.3–0.7 scale units, yet landed a
-  median 2.8 units from their parent: deflation, not a random jump, carried them
-  into a neighboring basin.
+  basin-hopping kicks), the same pool-and-racing search ended at 6.7 on both
+  seeds. Deflated hops started from kicks of only 0.3–0.6 scale units, yet
+  landed a median 2.8 units from their parent: deflation, not a random jump,
+  carried them into a neighboring basin.
 * **Racing saves solves.** After the first 20 iterations the cost is usually
-  within a few percent of the polished value (median 0.1–3 %), so the race is a
-  reliable early test. 4–9 of 25–44 hops per run were abandoned there, and none
-  of the 76 polished hops returned to a pool member.
-* **Tight bounds.** With coil–coil distance ≥ 0.14 m and coils ≤ 7 m, pool search
-  reached **29.1** (⟨|B·n|⟩/⟨|B|⟩ = 2.7e-4). The best earlier method reached
-  54.5 and a single solve 197.9. The gain over a single solve grows from 3.6×
-  to 6.8×.
+  close to the polished value (median 0.1–5 % off), so the race is a reliable
+  early test. 0–7 of 24–38 hops per run were abandoned there, and none of the 83
+  polished hops returned to a pool member.
+
+### Earlier runs with the coil frame free
+
+Rounds one and two ran with each coil's rotation matrix and shift free (36 extra,
+redundant unknowns). From circular coils, the single solve then stops at 197.9
+instead of 31.0. The global methods were less affected, because they restart
+from their own minima:
+
+| Method | Frame free: each seed | Worst seed | Frame fixed: each seed | Worst seed |
+|---|---|---|---|---|
+| Tutorial (single `lsq-exact`) | 197.9 | – | 31.0 | – |
+| Multistart | 16.43, 14.10 | 16.43 | not rerun | – |
+| CMA-ES + polish | 54.88 | 54.88 | not rerun | – |
+| CMA-ES on \|n\| ≤ 2 modes + polish | 35.77 | 35.77 | not rerun | – |
+| Basin hopping | 12.38, 2.37, 2.91 | 12.38 | 5.91, 5.74, 2.44 | 5.91 |
+| Annealed noisy gradient | 4.41, 5.68, 8.97 | 8.97 | 8.79, 16.27, 23.45 | 23.45 |
+| Pool search without deflation | 10.99, 4.44 | 10.99 | 6.67, 6.72 | 6.72 |
+| **Deflated pool search** | 2.37, 3.55, 2.51 | 3.55 | 2.96, 2.21, 2.51 | 2.96 |
+
+* **What still holds:** deflated pool search was the best and most consistent
+  method in both settings. Basin hopping scatters with the seed in both, and
+  deflation helps pool search in both.
+* **What changed:** the size of the gain over the tutorial (14× rather than 84×)
+  and the noisy gradient's standing (see above).
+* **The "tight" variant was based on the wrong baseline.** Its bounds (coil-coil
+  distance ≥ 0.14 m, coils ≤ 7 m) were the free-frame result's own values. The
+  real tutorial result violates them (0.105 m, 7.79 m), so that variant does not
+  check what it was meant to. `--variant matched` replaces it. For the record,
+  with the frame free the tight variant gave: single solve 197.9, multistart
+  70.0, noisy gradient 68.5, basin hopping 54.5, deflated pool search 29.1.
+
+The free-frame summaries and coilsets are in `results/stage2/`; rerun them with
+`--free-frame`. Their figures are `figures/stage2_*.png` without `_fixed`.
 
 ## NAE-constrained equilibria (the deflation tutorial problem)
 
@@ -294,11 +331,9 @@ Those trials are rejected automatically, but they waste time, so keep
 
 ## Caveats
 
-* **Coil rotation and shift are left free.** The stage-two runs optimize
-  each coil's `rotmat` and `shift` along with its Fourier coefficients. DESC's
-  `Optimizer.optimize` would fix them (`FixCurveRotation`, `FixCurveShift`). They
-  are redundant with the Fourier coefficients, so the reachable coil shapes are
-  the same, and every stage-two run uses the same setting.
+* **Coil frame.** The stage-two results above fix each coil's rotation and
+  shift, as DESC's `Optimizer` does. Rounds one and two left them free; see
+  [Earlier runs with the coil frame free](#earlier-runs-with-the-coil-frame-free).
 * **The NAE runs used one core each,** at the tutorial's low resolution, with
   one or two seeds. Their seed-0 runs ran alongside stage-two runs, and the
   seed-1 runs and the sum-form run ran four at a time. Rates are comparable to
@@ -307,17 +342,19 @@ Those trials are rejected automatically, but they waste time, so keep
 * **CPU only.** All timings are from 3–4 CPU cores. On a GPU each local solve is
   faster, so more of them fit in the same budget. The ranking of the methods
   should not change.
-* **Few seeds.** Stage-two methods ran 2 seeds each; the tight variant and CMA-ES
-  ran 1, stage one 1. The differences between multistart, basin hopping and the
-  noisy gradient are within seed scatter. Only "all of them ≫ single solve" and
-  "CMA-ES worst" are robust conclusions.
+* **Few seeds.** With the frame fixed, basin hopping, the noisy gradient and
+  pool search ran 3 seeds each, the ablation 2 and the matched-bounds runs 1.
+  Multistart and CMA-ES ran only with the frame free. Stage one ran 1 seed. The
+  robust conclusions are "every global method ≫ single solve" and "deflated pool
+  search is the most consistent"; finer rankings are within seed scatter.
 * **Curvature bound everywhere.** Every stage-two solution, including the
   tutorial's, has its maximum curvature at the bound (2.0, normalized).
 * **Reduced stage-one resolution.** Stage one ran at M = N = 6 with boundary
   modes up to 3, instead of M = N = 8 and 4 continuation steps. The minima at
   full resolution may differ.
 * **A failed first design.** The first version of the noisy gradient (pure
-  annealed Langevin dynamics from the circular coils) failed, ending at 208. It
+  annealed Langevin dynamics from the circular coils) failed, ending at 208 (with
+  the frame free). It
   is kept in `results/stage2/superseded/` for reference. The current version
   starts each excursion from the incumbent local minimum and always finishes with
   a local solve.
@@ -352,6 +389,10 @@ coilset.save("best_coils.h5")                           # coilset now holds the 
   high-frequency noise that the local solve has to undo.
 * Multistart and independent basin-hopping seeds are embarrassingly parallel:
   run one process per GPU or core and keep the best.
+* `ProjectedProblem` fixes each curve's rotation and shift, as DESC's
+  `Optimizer` does. Pass `free_curve_frame=True` to leave them free, as in the
+  first two rounds here; that changed where a single solve stopped by a factor
+  of six.
 * After a big improvement, check the per-term breakdown. In the tutorial
   objective the better minima come partly from longer, closer-packed coils.
   Decide whether that's acceptable, and tighten the bounds or raise the weights
@@ -367,16 +408,18 @@ coilset.save("best_coils.h5")                           # coilset now holds the 
 |---|---|
 | `desc_global.py` | Library: `ProjectedProblem` wrapper plus `multistart`, `basin_hopping`, `cma_es`, `annealed_noisy_gradient` |
 | `stage2_precise_QA.py` | Stage-two driver (tutorial problem), one method per call |
-| `run_stage2_all.sh` | Runs stage-two methods in sequence with the same budget and cores (`BUDGET`, `SEED`, `METHODS`, `EXTRA="--variant tight"`) |
+| `run_stage2_all.sh` | Runs stage-two methods in sequence with the same budget and cores (`BUDGET`, `SEED`, `METHODS`, `EXTRA="--variant matched"`) |
 | `stage1_precise_QA.py` | Stage-one driver (precise QA example): baseline / multistart / basin hopping |
 | `run_stage1_all.sh` | Same for stage one |
 | `nae_global.py` | NAE-constrained equilibria (deflation tutorial problem): tutorial deflation, sum-form deflation, multistart, deflated multistart, QS-guided pool |
 | `analyze.py` | Builds `results/summary.md` and `figures/` |
-| `results/stage2/*.json`, `*_coilset.h5` | Per-run summaries (cost trace, every local minimum found, metrics) and the best coilsets; `*_tight_*` = tight-bounds variant |
+| `results/stage2_fixed/*.json`, `*_coilset.h5` | Stage two with the coil frame fixed (the results above): per-run summaries (cost trace, every local minimum found, metrics) and the best coilsets; `*_matched_*` = matched-bounds variant |
+| `results/stage2/*.json`, `*_coilset.h5` | The same for the earlier free-frame runs (rounds one and two); `*_tight_*` = tight-bounds variant |
 | `results/stage1/*.json`, `*_eq.h5` | Same for stage one, with the best equilibria |
 | `results/nae/*.json`, `*.npz` | Every NAE-constrained equilibrium found: metrics (force error, ι, aspect ratio, Boozer f_B(ρ), magnetic well) and boundary coefficients |
 | `results/*/logs/` | Run logs (not committed) |
 | `results/stage2/superseded/` | First (failed) noisy-gradient design, kept for reference |
+| `figures/stage2_fixed_*.png` | Stage-two figures above; `figures/stage2_*.png` without `_fixed` are the free-frame ones |
 
 ## How the global search works
 
@@ -421,7 +464,7 @@ orthogonally projected onto the linear constraints, so `FixCoilCurrent`,
 | `basin_hopping` | Perturb the incumbent minimum, solve locally, Metropolis accept on `log(cost)`, adapt step size towards ~40 % acceptance, restart from the best after repeated failures | Exploits the structure near good minima |
 | `cma_es` | CMA-ES on the raw objective (each generation is evaluated in one `vmap`-ed call), then `lsq-exact` polishing of the best candidates | Derivative-free; best used around an existing local minimum |
 | `pool_search` | Pool of the best distinct minima; small kicks with a deflated first phase (`ScaledDeflation`), early abandonment of poor hops, undeflated polish | Round-two method; the most consistent on the coil problem |
-| `annealed_noisy_gradient` | Langevin-driven basin hopping: from the incumbent minimum, run Adam in the projected variables with smooth noise annealed to 0 over the cycle, then polish with `lsq-exact` and keep the result if it is better | The excursions follow low-cost valleys instead of jumping isotropically; most consistent method in the stage-two tests |
+| `annealed_noisy_gradient` | Langevin-driven basin hopping: from the incumbent minimum, run Adam in the projected variables with smooth noise annealed to 0 over the cycle, then polish with `lsq-exact` and keep the result if it is better | The excursions follow low-cost valleys instead of jumping isotropically; consistent with the coil frame free, much less so with it fixed |
 
 The stage-one driver uses the same idea at the level of `Equilibrium.optimize`. The
 boundary is perturbed with `Equilibrium.perturb` (modes up to the current k, major
@@ -433,19 +476,22 @@ local optimization.
 ```bash
 pip install -e . cma            # from the DESC repo root
 cd global_opt
-# stage two: 20 min per method on 3 cores
-./run_stage2_all.sh                                        # seed 0, all methods
-SEED=1 METHODS="multistart basin noisy" ./run_stage2_all.sh
-python stage2_precise_QA.py --method cma --max-order 2 --tag _lowmode
-EXTRA="--variant tight" LOGTAG=_tight METHODS="baseline multistart basin noisy" ./run_stage2_all.sh
+# stage two, coil frame fixed (results/stage2_fixed): 20 min per method on 3 cores
+SEED=0 METHODS="baseline converged basin noisy pool pool_nodefl" ./run_stage2_all.sh
+SEED=1 METHODS="basin noisy pool pool_nodefl" ./run_stage2_all.sh
+SEED=2 METHODS="basin noisy pool" ./run_stage2_all.sh
+EXTRA="--variant matched" LOGTAG=_matched METHODS="baseline pool basin" ./run_stage2_all.sh
+# earlier free-frame runs (results/stage2): add --free-frame
+EXTRA="--free-frame" ./run_stage2_all.sh                   # seed 0, round-one methods
+EXTRA="--free-frame" SEED=1 METHODS="multistart basin noisy" ./run_stage2_all.sh
+python stage2_precise_QA.py --free-frame --method cma --max-order 2 --tag _lowmode
+EXTRA="--free-frame --variant tight" LOGTAG=_tight METHODS="baseline multistart basin noisy pool" ./run_stage2_all.sh
 # stage one: 1 core, 1 h per method
 python stage1_precise_QA.py --method baseline
 python stage1_precise_QA.py --method multistart --budget 3600
 python stage1_precise_QA.py --method basin --budget 3600
 python stage1_precise_QA.py --method basin --budget 2400 --seed 1 --tag _explore \
     --init results/stage1/baseline_M6_k3_seed0_eq.h5
-SEED=0 METHODS="pool pool_nodefl" ./run_stage2_all.sh   # also SEED=1, 2
-EXTRA="--variant tight" LOGTAG=_tight METHODS="pool" ./run_stage2_all.sh
 # NAE-constrained equilibria: 30 min on one core each
 for m in deflation deflation_sum multistart defl_multistart qs_pool; do
   taskset -c 3 python nae_global.py --method $m --budget 1800 --seed 0

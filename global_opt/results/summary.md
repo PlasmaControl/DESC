@@ -59,6 +59,11 @@
 | Basin hopping | 0 | 5.91 | 5.91 | 2.30e-04 | 0.052 | 0.377 | 2.000 | 11.19, 6.67, 6.97 | 39 | 1210 |
 | Basin hopping | 1 | 5.74 | 5.74 | 2.14e-04 | 0.051 | 0.373 | 2.000 | 10.45, 7.68, 7.11 | 37 | 1219 |
 | Basin hopping | 2 | 2.44 | 2.41 | 1.56e-04 | 0.051 | 0.324 | 2.000 | 11.12, 7.16, 7.54 | 32 | 1228 |
+| Annealed noisy gradient | 0 | 8.79 | 8.79 | 2.31e-04 | 0.077 | 0.360 | 2.000 | 8.71, 6.65, 6.59 | 20 | 1228 |
+| Annealed noisy gradient | 1 | 16.27 | 16.27 | 2.83e-04 | 0.051 | 0.379 | 2.001 | 8.33, 6.60, 6.56 | 21 | 1221 |
+| Annealed noisy gradient | 2 | 23.45 | 23.45 | 3.44e-04 | 0.057 | 0.372 | 2.001 | 8.08, 6.27, 6.16 | 28 | 1260 |
+| Pool search without deflation (ablation) | 0 | 6.67 | 6.26 | 2.46e-04 | 0.049 | 0.395 | 2.000 | 11.63, 7.74, 7.52 | 62 | 1222 |
+| Pool search without deflation (ablation) | 1 | 6.72 | 6.72 | 2.02e-04 | 0.070 | 0.355 | 2.001 | 8.99, 6.97, 6.95 | 53 | 1230 |
 | Deflated pool search (new) | 0 | 2.96 | 2.96 | 1.50e-04 | 0.063 | 0.364 | 2.000 | 10.26, 7.61, 7.50 | 70 | 1221 |
 | Deflated pool search (new) | 1 | 2.21 | 2.21 | 1.49e-04 | 0.057 | 0.345 | 2.000 | 11.40, 7.45, 7.87 | 60 | 1240 |
 | Deflated pool search (new) | 2 | 2.51 | 2.51 | 1.51e-04 | 0.063 | 0.349 | 2.000 | 10.59, 7.20, 7.42 | 49 | 1238 |
@@ -73,7 +78,9 @@
 | Basin hopping | free (rounds 1-2) | 12.38 | 2.37 | 2.91 | 12.38 |
 | Basin hopping | fixed (DESC default) | 5.91 | 5.74 | 2.44 | 5.91 |
 | Annealed noisy gradient | free (rounds 1-2) | 4.41 | 5.68 | 8.97 | 8.97 |
+| Annealed noisy gradient | fixed (DESC default) | 8.79 | 16.27 | 23.45 | 23.45 |
 | Pool search without deflation (ablation) | free (rounds 1-2) | 10.99 | 4.44 | – | 10.99 |
+| Pool search without deflation (ablation) | fixed (DESC default) | 6.67 | 6.72 | – | 6.72 |
 | Deflated pool search (new) | free (rounds 1-2) | 2.37 | 3.55 | 2.51 | 3.55 |
 | Deflated pool search (new) | fixed (DESC default) | 2.96 | 2.21 | 2.51 | 2.96 |
 
@@ -81,9 +88,20 @@
 
 | Method | Seed | Hops | Abandoned early | Polished | Entered pool | Duplicates | Best |
 |---|---|---|---|---|---|---|---|
+| Pool search without deflation (ablation) | 0 | 37 | 13 | 24 | 16 | 0 | 6.67 |
+| Pool search without deflation (ablation) | 1 | 29 | 6 | 23 | 14 | 0 | 6.72 |
 | Deflated pool search (new) | 0 | 38 | 7 | 31 | 21 | 0 | 2.96 |
 | Deflated pool search (new) | 1 | 31 | 3 | 28 | 17 | 0 | 2.21 |
 | Deflated pool search (new) | 2 | 24 | 0 | 24 | 15 | 0 | 2.51 |
+| Deflated pool search (new), matched bounds | 0 | 34 | 1 | 33 | 16 | 0 | 9.10 |
+
+## Stage two, fixed frame, matched bounds (coil-coil >= 0.105 m, length <= 7.8 m)
+
+| Method | Seed | Best cost | Quadratic-flux term | <\|B·n\|>/<\|B\|> | Min coil-coil [m] | Min plasma-coil [m] | Max curvature (norm.) | Coil lengths [m] | Local solves | Wall [s] |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Tutorial (single lsq-exact), matched bounds | 0 | 31.00 | 31.00 | 3.66e-04 | 0.105 | 0.353 | 2.000 | 7.79, 6.24, 6.12 | 1 | 69 |
+| Basin hopping, matched bounds | 0 | 14.24 | 14.14 | 2.56e-04 | 0.105 | 0.348 | 2.000 | 7.81, 6.64, 6.80 | 32 | 1253 |
+| Deflated pool search (new), matched bounds | 0 | 9.10 | 9.06 | 1.92e-04 | 0.105 | 0.336 | 2.000 | 7.81, 7.16, 7.33 | 68 | 1218 |
 
 ## NAE-constrained equilibria (deflation tutorial problem)
 

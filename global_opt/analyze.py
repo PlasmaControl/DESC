@@ -189,9 +189,12 @@ def plot_convergence(
 
 
 def plot_minima(
-    runs, fname, baseline_cost, xlabel, title, methods, labels=None, xmax=None
+    runs, fname, baseline_cost, xlabel, title, methods, labels=None, xmax=None, skip_first=False
 ):
-    """Strip plot of every local minimum; values above xmax are drawn at the edge."""
+    """Strip plot of every local minimum; values above xmax are drawn at the edge.
+
+    ``skip_first`` drops each run's starting solve (the single-solve baseline).
+    """
     fig, ax = plt.subplots(figsize=(7.6, max(2.4, 0.9 + 0.55 * len(methods))), dpi=150)
     _style(ax)
     ax.grid(False, axis="y")
@@ -199,7 +202,8 @@ def plot_minima(
     n_clipped = 0
     for j, m in enumerate(methods):
         vals = np.concatenate(
-            [np.asarray(d["local_minima"], float) for d in runs.get(m, [])] or [[]]
+            [np.asarray(d["local_minima"][int(skip_first):], float) for d in runs.get(m, [])]
+            or [[]]
         )
         vals = vals[np.isfinite(vals)]
         y = j + 0.18 * rng.uniform(-1, 1, vals.size)
@@ -627,8 +631,9 @@ def main():
                 os.path.join(FIG, "stage2_fixed_local_minima.png"),
                 base_f,
                 "objective value of each local minimum (log)",
-                "Stage two: local minima reached (abandoned hops not shown)",
+                "Stage two: local minima reached (starting solve and abandoned hops not shown)",
                 keys,
+                skip_first=True,
             )
             if args.fields:
                 stage2_fields(rf, stage="stage2_fixed")

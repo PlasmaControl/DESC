@@ -972,6 +972,39 @@ def _iota_vacuum(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="iota_r vacuum",
+    label="\\partial_{\\rho} \\iota~\\mathrm{in~vacuum}",
+    units="~",
+    units_long="None",
+    description="Rotational transform (normalized by 2pi), vacuum contribution, "
+    + "first radial derivative",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["iota_den", "iota_den_r", "iota_num vacuum", "iota_num_r vacuum"],
+    axis_limit_data=["iota_den_rr", "iota_num_rr vacuum"],
+)
+def _iota_r_vacuum(params, transforms, profiles, data, **kwargs):
+    # See the document attached to GitHub pull request #556 for the math.
+    # Assumes ζ = ϕ − ω and θ = ϑ − λ.
+    data["iota_r vacuum"] = transforms["grid"].replace_at_axis(
+        safediv(
+            data["iota_num_r vacuum"] * data["iota_den"]
+            - data["iota_num vacuum"] * data["iota_den_r"],
+            data["iota_den"] ** 2,
+        ),
+        lambda: safediv(
+            data["iota_num_rr vacuum"] * data["iota_den_r"]
+            - data["iota_num_r vacuum"] * data["iota_den_rr"],
+            (2 * data["iota_den_r"] ** 2),
+        ),
+    )
+    return data
+
+
+@register_compute_fun(
     name="iota_num current",
     label="\\iota_{\\mathrm{numerator}}~\\mathrm{from~current}",
     units="m^{-1}",
@@ -1137,6 +1170,93 @@ def _iota_num_r_vacuum(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="iota_num_rr vacuum",
+    label="\\partial_{\\rho\\rho} \\iota_{\\mathrm{numerator}}~\\mathrm{in~vacuum}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Numerator of rotational transform formula, vacuum contribution, "
+    + "second radial derivative",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=[
+        "lambda_t",
+        "lambda_rt",
+        "lambda_rrt",
+        "lambda_z",
+        "lambda_rz",
+        "lambda_rrz",
+        "g_tt",
+        "g_tt_r",
+        "g_tt_rr",
+        "g_tz",
+        "g_tz_r",
+        "g_tz_rr",
+        "sqrt(g)",
+        "sqrt(g)_r",
+        "sqrt(g)_rr",
+    ],
+    axis_limit_data=["sqrt(g)_rrr", "g_tt_rrr", "g_tz_rrr"],
+    resolution_requirement="tz",
+)
+def _iota_num_rr_vacuum(params, transforms, profiles, data, **kwargs):
+    # Assumes ζ = ϕ − ω and θ = ϑ − λ.
+    beta = safediv(
+        data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"],
+        data["sqrt(g)"],
+    )
+    beta_r = safediv(
+        data["lambda_rz"] * data["g_tt"]
+        + data["lambda_z"] * data["g_tt_r"]
+        - data["lambda_rt"] * data["g_tz"]
+        - (1 + data["lambda_t"]) * data["g_tz_r"]
+        - beta * data["sqrt(g)_r"],
+        data["sqrt(g)"],
+    )
+    beta_rr = transforms["grid"].replace_at_axis(
+        safediv(
+            data["lambda_rrz"] * data["g_tt"]
+            + 2 * data["lambda_rz"] * data["g_tt_r"]
+            + data["lambda_z"] * data["g_tt_rr"]
+            - data["lambda_rrt"] * data["g_tz"]
+            - 2 * data["lambda_rt"] * data["g_tz_r"]
+            - (1 + data["lambda_t"]) * data["g_tz_rr"]
+            - 2 * beta_r * data["sqrt(g)_r"]
+            - beta * data["sqrt(g)_rr"],
+            data["sqrt(g)"],
+        ),
+        lambda: safediv(
+            2
+            * data["sqrt(g)_r"] ** 2
+            * (
+                3 * data["g_tt_rr"] * data["lambda_rz"]
+                + data["g_tt_rrr"] * data["lambda_z"]
+                - 3 * data["g_tz_rr"] * data["lambda_rt"]
+                - 3 * data["g_tz_r"] * data["lambda_rrt"]
+                - data["g_tz_rrr"] * (1 + data["lambda_t"])
+            )
+            + data["sqrt(g)_r"]
+            * (
+                3
+                * data["sqrt(g)_rr"]
+                * (
+                    2 * data["g_tz_r"] * data["lambda_rt"]
+                    - data["g_tt_rr"] * data["lambda_z"]
+                    + data["g_tz_rr"] * (1 + data["lambda_t"])
+                )
+                + 2 * data["sqrt(g)_rrr"] * data["g_tz_r"] * (1 + data["lambda_t"])
+            )
+            - 3 * data["sqrt(g)_rr"] ** 2 * data["g_tz_r"] * (1 + data["lambda_t"]),
+            (6 * data["sqrt(g)_r"] ** 3),
+        ),
+    )
+    data["iota_num_rr vacuum"] = surface_integrals(transforms["grid"], beta_rr)
+    return data
+
+
+@register_compute_fun(
     name="iota_num",
     label="\\iota_{\\mathrm{numerator}}",
     units="m^{-1}",
@@ -1195,29 +1315,7 @@ def _iota_num_r(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=["current", "iota"],
     coordinates="r",
-    data=[
-        "0",
-        "lambda_t",
-        "lambda_rt",
-        "lambda_rrt",
-        "lambda_z",
-        "lambda_rz",
-        "lambda_rrz",
-        "g_tt",
-        "g_tt_r",
-        "g_tt_rr",
-        "g_tz",
-        "g_tz_r",
-        "g_tz_rr",
-        "sqrt(g)",
-        "sqrt(g)_r",
-        "sqrt(g)_rr",
-        "psi_r",
-        "psi_rr",
-        "psi_rrr",
-    ],
-    axis_limit_data=["sqrt(g)_rrr", "g_tt_rrr", "g_tz_rrr"],
-    resolution_requirement="tz",
+    data=["0", "psi_r", "psi_rr", "psi_rrr", "iota_num_rr vacuum"],
 )
 def _iota_num_rr(params, transforms, profiles, data, **kwargs):
     """Numerator of rotational transform formula, second radial derivative.
@@ -1256,57 +1354,7 @@ def _iota_num_rr(params, transforms, profiles, data, **kwargs):
                 + safediv(current_r * data["psi_rrr"] ** 2, data["psi_rr"] ** 3),
             )
         )
-        beta = safediv(
-            data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"],
-            data["sqrt(g)"],
-        )
-        beta_r = safediv(
-            data["lambda_rz"] * data["g_tt"]
-            + data["lambda_z"] * data["g_tt_r"]
-            - data["lambda_rt"] * data["g_tz"]
-            - (1 + data["lambda_t"]) * data["g_tz_r"]
-            - beta * data["sqrt(g)_r"],
-            data["sqrt(g)"],
-        )
-        beta_rr = transforms["grid"].replace_at_axis(
-            safediv(
-                data["lambda_rrz"] * data["g_tt"]
-                + 2 * data["lambda_rz"] * data["g_tt_r"]
-                + data["lambda_z"] * data["g_tt_rr"]
-                - data["lambda_rrt"] * data["g_tz"]
-                - 2 * data["lambda_rt"] * data["g_tz_r"]
-                - (1 + data["lambda_t"]) * data["g_tz_rr"]
-                - 2 * beta_r * data["sqrt(g)_r"]
-                - beta * data["sqrt(g)_rr"],
-                data["sqrt(g)"],
-            ),
-            lambda: safediv(
-                2
-                * data["sqrt(g)_r"] ** 2
-                * (
-                    3 * data["g_tt_rr"] * data["lambda_rz"]
-                    + data["g_tt_rrr"] * data["lambda_z"]
-                    - 3 * data["g_tz_rr"] * data["lambda_rt"]
-                    - 3 * data["g_tz_r"] * data["lambda_rrt"]
-                    - data["g_tz_rrr"] * (1 + data["lambda_t"])
-                )
-                + data["sqrt(g)_r"]
-                * (
-                    3
-                    * data["sqrt(g)_rr"]
-                    * (
-                        2 * data["g_tz_r"] * data["lambda_rt"]
-                        - data["g_tt_rr"] * data["lambda_t"]
-                        + data["g_tz_rr"] * (1 + data["lambda_t"])
-                    )
-                    + 2 * data["sqrt(g)_rrr"] * data["g_tz_r"] * (1 + data["lambda_t"])
-                )
-                - 3 * data["sqrt(g)_rr"] ** 2 * data["g_tz_r"] * (1 + data["lambda_t"]),
-                (6 * data["sqrt(g)_r"] ** 3),
-            ),
-        )
-        beta_rr = surface_integrals(transforms["grid"], beta_rr)
-        data["iota_num_rr"] = alpha_rr + beta_rr
+        data["iota_num_rr"] = alpha_rr + data["iota_num_rr vacuum"]
     return data
 
 

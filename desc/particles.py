@@ -1044,8 +1044,8 @@ def trace_particles(
         the field the standard way. Not used for tracing from Equilibrium field.
         Default is True.
     chunk_size : int, optional
-        Chunk size for integration over particles. If None (default), the integration
-        will be done over all particles at once without chunking.
+        Maximum number of particles in a chunk. Each chunk will have the same number
+        of particles. If None (default), all particles are integrated at once.
     options : dict, optional
         Additional keyword arguments to pass to the field computation,
             - iota : Profile

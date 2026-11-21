@@ -79,8 +79,8 @@ doc_name = """
 """
 doc_jac_chunk_size = """
     jac_chunk_size : int or ``auto``, optional
-        Will calculate the Jacobian
-        ``jac_chunk_size`` columns at a time, instead of all at once.
+        Maximum number of columns of the Jacobian to calculate at a time, instead of
+        all at once. Each chunk will have the same number of columns.
         The memory usage of the Jacobian calculation is roughly
         ``memory usage = m0+m1*jac_chunk_size``: the smaller the chunk size,
         the less memory the Jacobian calculation will require (with some baseline
@@ -333,8 +333,9 @@ class ObjectiveFunction(IOAble):
     name : str
         Name of the objective function.
     jac_chunk_size : int or ``auto``, optional
-         If ``batched`` deriv_mode is used, will calculate the Jacobian
-        ``jac_chunk_size`` columns at a time, instead of all at once.
+        If ``batched`` deriv_mode is used, maximum number of columns of the Jacobian
+        to calculate at a time, instead of all at once. Each chunk will have the same
+        number of columns.
         The memory usage of the Jacobian calculation is roughly
         ``memory usage = m0+m1*jac_chunk_size``: the smaller the chunk size,
         the less memory the Jacobian calculation will require (with some baseline

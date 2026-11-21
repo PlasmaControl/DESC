@@ -1,10 +1,8 @@
 """Wrappers for doing STELLOPT/SIMSOPT like optimization."""
 
-import functools
-
 import numpy as np
 
-from desc.backend import jit, jnp, put
+from desc.backend import jnp, put
 from desc.objectives import (
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
@@ -18,7 +16,7 @@ from desc.objectives.utils import (
     factorize_linear_constraints,
     remove_fixed_parameters,
 )
-from desc.utils import Timer, errorif, get_instance, setdefault, warnif
+from desc.utils import Timer, errorif, get_instance, jit_if_possible, setdefault, warnif
 
 from .utils import f_where_x, normalize_columns
 
@@ -1242,24 +1240,6 @@ class ProximalProjection(ObjectiveFunction):
 # correctly, while if we leave self unstatic then it recompiles every time because
 # the pytree structure of ProximalProjection is changing. To get around that we
 # define these helper functions that are stateless so we can safely jit them
-
-
-def jit_if_possible(func=None, *, static_argnames=("op",)):
-    """Jit a function if use_jit."""
-    if func is None:
-        return functools.partial(jit_if_possible, static_argnames=static_argnames)
-    jitted_func = functools.partial(jit, static_argnames=list(static_argnames))(func)
-
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        # first arg has to be ObjectiveFunction
-        obj = args[0]
-        if getattr(obj, "_use_jit", False):
-            return jitted_func(*args, **kwargs)
-        else:
-            return func(*args, **kwargs)
-
-    return wrapper
 
 
 @jit_if_possible(static_argnames=("dimc_per_thing", "eq_idx", "op"))

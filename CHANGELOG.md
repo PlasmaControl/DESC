@@ -4,6 +4,7 @@ Changelog
 Bug Fixes
 
 - Fixes ``perturb`` with NumPy array weights and with 2D weight matrices.
+- Fixes loss of accuracy in ``SplineMagneticField`` near the toroidal angle wrap by computing toroidal derivatives periodically.
 
 
 v0.17.4

@@ -1859,6 +1859,14 @@ class SplineMagneticField(_MagneticField, Optimizable):
         assert len(new) == len(self.currents)
         self._currents = new
 
+    def _approx_dphi_periodic(self, f):
+        period = 2 * np.pi / self.NFP
+        k = min(2, len(self._phi))
+        phi = jnp.asarray(self._phi)
+        phi_pad = jnp.concatenate([phi[-k:] - period, phi, phi[:k] + period])
+        f_pad = jnp.concatenate([f[:, -k:], f, f[:, :k]], axis=1)
+        return approx_df(phi_pad, f_pad, self._method, 1)[:, k:-k]
+
     def _approx_derivs(self, Bi):
         tempdict = {}
         tempdict["fx"] = approx_df(self._R, Bi, self._method, 0)
@@ -1872,8 +1880,8 @@ class SplineMagneticField(_MagneticField, Optimizable):
             tempdict["fyz"] = jnp.zeros_like(tempdict["fx"])
             tempdict["fxyz"] = jnp.zeros_like(tempdict["fx"])
         else:
-            tempdict["fy"] = approx_df(self._phi, Bi, self._method, 1)
-            tempdict["fxy"] = approx_df(self._phi, tempdict["fx"], self._method, 1)
+            tempdict["fy"] = self._approx_dphi_periodic(Bi)
+            tempdict["fxy"] = self._approx_dphi_periodic(tempdict["fx"])
             tempdict["fyz"] = approx_df(self._Z, tempdict["fy"], self._method, 2)
             tempdict["fxyz"] = approx_df(self._Z, tempdict["fxy"], self._method, 2)
         if self._axisym:

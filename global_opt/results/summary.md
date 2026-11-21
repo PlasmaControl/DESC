@@ -35,11 +35,11 @@
 
 | Method | Seed | Best cost | Quadratic-flux term | <\|B·n\|>/<\|B\|> | Min coil-coil [m] | Min plasma-coil [m] | Max curvature (norm.) | Coil lengths [m] | Local solves | Wall [s] |
 |---|---|---|---|---|---|---|---|---|---|---|
-| Tutorial (single lsq-exact) | 0 | 197.88 | 197.87 | 9.16e-04 | 0.144 | 0.329 | 2.002 | 6.97, 5.42, 5.52 | 1 | 57 |
-| Multistart | 0 | 69.96 | 67.22 | 4.92e-04 | 0.138 | 0.330 | 2.000 | 7.06, 6.05, 6.94 | 32 | 1211 |
-| Basin hopping | 0 | 54.48 | 51.98 | 4.18e-04 | 0.137 | 0.329 | 2.000 | 7.05, 6.22, 6.96 | 31 | 1216 |
-| Annealed noisy gradient | 0 | 68.49 | 65.87 | 4.66e-04 | 0.137 | 0.332 | 2.000 | 7.05, 6.37, 6.18 | 17 | 1224 |
-| Deflated pool search (new) | 0 | 29.07 | 28.34 | 2.71e-04 | 0.138 | 0.317 | 2.000 | 7.01, 7.00, 7.00 | 56 | 1213 |
+| Tutorial (single lsq-exact), tight bounds | 0 | 197.88 | 197.87 | 9.16e-04 | 0.144 | 0.329 | 2.002 | 6.97, 5.42, 5.52 | 1 | 57 |
+| Multistart, tight bounds | 0 | 69.96 | 67.22 | 4.92e-04 | 0.138 | 0.330 | 2.000 | 7.06, 6.05, 6.94 | 32 | 1211 |
+| Basin hopping, tight bounds | 0 | 54.48 | 51.98 | 4.18e-04 | 0.137 | 0.329 | 2.000 | 7.05, 6.22, 6.96 | 31 | 1216 |
+| Annealed noisy gradient, tight bounds | 0 | 68.49 | 65.87 | 4.66e-04 | 0.137 | 0.332 | 2.000 | 7.05, 6.37, 6.18 | 17 | 1224 |
+| Deflated pool search (new), tight bounds | 0 | 29.07 | 28.34 | 2.71e-04 | 0.138 | 0.317 | 2.000 | 7.01, 7.00, 7.00 | 56 | 1213 |
 
 ## Stage one
 
@@ -49,6 +49,41 @@
 | Multistart (perturbed initial boundary) | 0 | 1.425e-04 | 1.357e-04 | 1.4e-10 | 6.7e-06 | 6.000 | 0.419 | 11 | 3650 |
 | Basin hopping | 0 | 1.392e-04 | 1.378e-04 | 4.7e-10 | 1.4e-06 | 6.000 | 0.420 | 29 | 3696 |
 | Basin hopping from example result (1 core) | 1 | 1.158e-04 | 1.131e-04 | 6.4e-10 | 2.7e-06 | 6.000 | 0.419 | 21 | 2541 |
+
+## Stage two with the coil frame fixed (rotmat, shift; DESC default)
+
+| Method | Seed | Best cost | Quadratic-flux term | <\|B·n\|>/<\|B\|> | Min coil-coil [m] | Min plasma-coil [m] | Max curvature (norm.) | Coil lengths [m] | Local solves | Wall [s] |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Tutorial (single lsq-exact) | 0 | 31.00 | 31.00 | 3.66e-04 | 0.105 | 0.353 | 2.000 | 7.79, 6.24, 6.12 | 1 | 78 |
+| Same start, tight tolerances | 0 | 31.00 | 31.00 | 3.66e-04 | 0.105 | 0.353 | 2.000 | 7.79, 6.24, 6.12 | 1 | 79 |
+| Basin hopping | 0 | 5.91 | 5.91 | 2.30e-04 | 0.052 | 0.377 | 2.000 | 11.19, 6.67, 6.97 | 39 | 1210 |
+| Basin hopping | 1 | 5.74 | 5.74 | 2.14e-04 | 0.051 | 0.373 | 2.000 | 10.45, 7.68, 7.11 | 37 | 1219 |
+| Basin hopping | 2 | 2.44 | 2.41 | 1.56e-04 | 0.051 | 0.324 | 2.000 | 11.12, 7.16, 7.54 | 32 | 1228 |
+| Deflated pool search (new) | 0 | 2.96 | 2.96 | 1.50e-04 | 0.063 | 0.364 | 2.000 | 10.26, 7.61, 7.50 | 70 | 1221 |
+| Deflated pool search (new) | 1 | 2.21 | 2.21 | 1.49e-04 | 0.057 | 0.345 | 2.000 | 11.40, 7.45, 7.87 | 60 | 1240 |
+| Deflated pool search (new) | 2 | 2.51 | 2.51 | 1.51e-04 | 0.063 | 0.349 | 2.000 | 10.59, 7.20, 7.42 | 49 | 1238 |
+
+### Free vs. fixed coil frame
+
+| Method | Coil frame | Seed 0 | Seed 1 | Seed 2 | Worst seed |
+|---|---|---|---|---|---|
+| Tutorial (single lsq-exact) | free (rounds 1-2) | 197.88 | – | – | – |
+| Tutorial (single lsq-exact) | fixed (DESC default) | 31.00 | – | – | – |
+| Multistart | free (rounds 1-2) | 16.43 | 14.10 | – | 16.43 |
+| Basin hopping | free (rounds 1-2) | 12.38 | 2.37 | 2.91 | 12.38 |
+| Basin hopping | fixed (DESC default) | 5.91 | 5.74 | 2.44 | 5.91 |
+| Annealed noisy gradient | free (rounds 1-2) | 4.41 | 5.68 | 8.97 | 8.97 |
+| Pool search without deflation (ablation) | free (rounds 1-2) | 10.99 | 4.44 | – | 10.99 |
+| Deflated pool search (new) | free (rounds 1-2) | 2.37 | 3.55 | 2.51 | 3.55 |
+| Deflated pool search (new) | fixed (DESC default) | 2.96 | 2.21 | 2.51 | 2.96 |
+
+### Pool search bookkeeping (fixed frame)
+
+| Method | Seed | Hops | Abandoned early | Polished | Entered pool | Duplicates | Best |
+|---|---|---|---|---|---|---|---|
+| Deflated pool search (new) | 0 | 38 | 7 | 31 | 21 | 0 | 2.96 |
+| Deflated pool search (new) | 1 | 31 | 3 | 28 | 17 | 0 | 2.21 |
+| Deflated pool search (new) | 2 | 24 | 0 | 24 | 15 | 0 | 2.51 |
 
 ## NAE-constrained equilibria (deflation tutorial problem)
 

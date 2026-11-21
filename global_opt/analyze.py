@@ -59,10 +59,20 @@ GLOBAL = ["multistart", "basin", "noisy", "cma", "cma_lowmode", "pool_nodefl", "
 IMPROVED = ["basin", "noisy", "pool_nodefl", "pool"]
 TIGHT = ["baseline_tight", "multistart_tight", "basin_tight", "noisy_tight", "pool_tight"]
 TIGHT_GLOBAL = TIGHT[1:]
+MATCHED = ["baseline_matched", "basin_matched", "pool_matched"]
+MATCHED_GLOBAL = MATCHED[1:]
+VARIANT_NOTE = {"_tight": ", tight bounds", "_matched": ", matched bounds"}
 
 
 def _base(key):
-    return key[: -len("_tight")] if key.endswith("_tight") else key
+    for sfx in VARIANT_NOTE:
+        if key.endswith(sfx):
+            return key[: -len(sfx)]
+    return key
+
+
+def _note(key):
+    return next((v for k, v in VARIANT_NOTE.items() if key.endswith(k)), "")
 
 
 def label(key):
@@ -109,7 +119,7 @@ def stage2_table(runs, keys=ORDER):
         for d in runs.get(m, []):
             x = d["metrics"]
             rows.append(
-                f"| {LABELS[_base(m)]} | {d['seed']} | {d['best_cost']:.2f} "
+                f"| {LABELS[_base(m)]}{_note(m)} | {d['seed']} | {d['best_cost']:.2f} "
                 f"| {x['terms']['quadratic flux']:.2f} | {x['Bn_over_B']:.2e} "
                 f"| {x['min_coil_coil_dist']:.3f} | {x['min_plasma_coil_dist']:.3f} "
                 f"| {x['max_curvature_normalized']:.3f} "
@@ -245,7 +255,7 @@ def plot_minima(
     plt.close(fig)
 
 
-def stage2_fields(runs, variant="tutorial"):
+def stage2_fields(runs, variant="tutorial", stage="stage2"):
     """B.n on the plasma boundary + coil shapes: tutorial-style result vs best found."""
     import sys
 
@@ -255,13 +265,13 @@ def stage2_fields(runs, variant="tutorial"):
     from stage2_precise_QA import setup
 
     sfx = "" if variant == "tutorial" else "_" + variant
-    keys = GLOBAL if variant == "tutorial" else TIGHT_GLOBAL
+    keys = {"tutorial": GLOBAL, "tight": TIGHT_GLOBAL, "matched": MATCHED_GLOBAL}[variant]
     eq, _, _, _ = setup()
     base_run = runs["baseline" + sfx][0]
-    base = dload(os.path.join(RES, "stage2", f"baseline{sfx}_seed0_coilset.h5"))
+    base = dload(os.path.join(RES, stage, f"baseline{sfx}_seed0_coilset.h5"))
     best_run = min((d for m in keys for d in runs.get(m, [])), key=lambda d: d["best_cost"])
     best_key = best_run["method"] + best_run.get("tag", "")
-    best = dload(os.path.join(RES, "stage2", f"{best_key}_seed{best_run['seed']}_coilset.h5"))
+    best = dload(os.path.join(RES, stage, f"{best_key}_seed{best_run['seed']}_coilset.h5"))
     grid = LinearGrid(M=60, N=60, NFP=1, endpoint=True)
     data = []
     for cs in (base, best):
@@ -308,7 +318,8 @@ def stage2_fields(runs, variant="tutorial"):
     ax.set_title("Coils, top view", fontsize=10, loc="left")
     ax.legend(frameon=False, fontsize=8, loc="upper center", bbox_to_anchor=(0.5, 0.02), ncol=3)
     ax.axis("off")
-    fig.savefig(os.path.join(FIG, f"stage2{sfx}_Bn_and_coils.png"), bbox_inches="tight")
+    pre = stage if stage != "stage2" else "stage2"
+    fig.savefig(os.path.join(FIG, f"{pre}{sfx}_Bn_and_coils.png"), bbox_inches="tight")
     plt.close(fig)
 
 
@@ -457,7 +468,7 @@ def pool_stats_table(runs, keys):
             hops = d.get("hops") or []
             n = sum(1 for h in hops if h.get("hop", 0) > 0)
             rows.append(
-                f"| {LABELS[_base(k)]}{', tight bounds' if k.endswith('_tight') else ''} "
+                f"| {LABELS[_base(k)]}{_note(k)} "
                 f"| {d['seed']} | {n} | {st.get('abandoned', 0)} "
                 f"| {n - st.get('abandoned', 0)} | {st.get('inserted', 0)} "
                 f"| {st.get('duplicates', 0)} | {d['best_cost']:.2f} |"
@@ -596,19 +607,51 @@ def main():
             )
     rf = load("stage2_fixed")
     if rf and r2:
-        out += ["## Stage two with the coil frame fixed (rotmat, shift)", "",
+        out += ["## Stage two with the coil frame fixed (rotmat, shift; DESC default)", "",
+                stage2_table(rf), "", "### Free vs. fixed coil frame", "",
                 frame_table(r2, rf), ""]
         keys = [m for m in IMPROVED if m in rf]
         if keys and "baseline" in rf:
+            base_f = rf["baseline"][0]["best_cost"]
             plot_convergence(
                 rf,
                 os.path.join(FIG, "stage2_fixed_convergence.png"),
-                rf["baseline"][0]["best_cost"],
+                base_f,
                 "best objective found",
-                "Stage two, coil rotation and shift fixed: best cost vs. time",
+                "Stage two (precise QA coils): best cost vs. time",
                 keys=keys,
                 legend_loc="below",
             )
+            plot_minima(
+                rf,
+                os.path.join(FIG, "stage2_fixed_local_minima.png"),
+                base_f,
+                "objective value of each local minimum (log)",
+                "Stage two: local minima reached (abandoned hops not shown)",
+                keys,
+            )
+            if args.fields:
+                stage2_fields(rf, stage="stage2_fixed")
+        pk = [k for k in ["pool_nodefl", "pool", "pool_matched"] if k in rf]
+        if pk:
+            out += ["### Pool search bookkeeping (fixed frame)", "", pool_stats_table(rf, pk), ""]
+        if "baseline_matched" in rf:
+            out += ["## Stage two, fixed frame, matched bounds (coil-coil >= 0.105 m, "
+                    "length <= 7.8 m)", "", stage2_table(rf, MATCHED), ""]
+            keys = [m for m in MATCHED_GLOBAL if m in rf]
+            if keys:
+                plot_convergence(
+                    rf,
+                    os.path.join(FIG, "stage2_fixed_matched_convergence.png"),
+                    rf["baseline_matched"][0]["best_cost"],
+                    "best objective found",
+                    "Stage two, bounds matched to the tutorial result: best cost vs. time",
+                    keys=keys,
+                    base_label="single lsq-exact solve",
+                    legend_loc="below",
+                )
+                if args.fields:
+                    stage2_fields(rf, "matched", stage="stage2_fixed")
     rn = load_nae()
     if rn:
         out += ["## NAE-constrained equilibria (deflation tutorial problem)", "", nae_table(rn), ""]

@@ -18,7 +18,13 @@ deflation
     The tutorial's Algorithm 1: from the same initial guess every time, a deflated
     solve (DESC ``DeflationOperator`` wrapping force balance, M*f with p = 2,
     sigma = 500, deflating the boundary coefficients of every solution found so far),
-    then an NAE-constrained solve, then a fixed-boundary solve.
+    then an NAE-constrained solve, then a fixed-boundary solve. The tutorial's
+    default product reduction overflows float64 after ~55 deflated states (each
+    factor is >= sigma = 500), after which every iteration returns the first
+    solution again.
+deflation_sum
+    The same with the paper's sum-reduction operator, eq. (4.4)
+    (``multiple_deflation_type="sum"``, single shift), which does not overflow.
 multistart
     Random smooth perturbations of the initial guess (outer-shape Zernike modes only,
     so the near-axis behaviour is untouched), then the NAE-constrained solve and the
@@ -175,8 +181,8 @@ def fixed_boundary(eq):
     return eqf
 
 
-def run_deflation(args, qsc_eq, eq_fit, rec):
-    """The tutorial's Algorithm 1, unchanged."""
+def run_deflation(args, qsc_eq, eq_fit, rec, reduction="prod"):
+    """The tutorial's Algorithm 1 (``reduction="sum"``: eq. 4.4 of the paper)."""
     eqs = [None] * 400  # padded so the deflation objective is not recompiled
     i = 0
     while time.time() - rec.t0 < args.budget:
@@ -188,6 +194,7 @@ def run_deflation(args, qsc_eq, eq_fit, rec):
                 dobj = ObjectiveFunction(DeflationOperator(
                     thing=eq, things_to_deflate=eqs, objective=ForceBalance(eq),
                     power=2, sigma=500, params_to_deflate_with={"Rb_lmn": True, "Zb_lmn": True},
+                    multiple_deflation_type=reduction, single_shift=reduction == "sum",
                 ))
                 eq.solve(objective=dobj, constraints=cons, verbose=0, ftol=1e-3,
                          maxiter=15, xtol=1e-6)
@@ -260,7 +267,8 @@ def run_qs_pool(args, qsc_eq, eq_fit, rec, pool_size=5):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--method", required=True,
-                    choices=["deflation", "multistart", "defl_multistart", "qs_pool"])
+                    choices=["deflation", "deflation_sum", "multistart", "defl_multistart",
+                             "qs_pool"])
     ap.add_argument("--budget", type=float, default=1800.0)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--sigma", type=float, default=None)
@@ -275,6 +283,8 @@ def main():
     rec = Recorder(args.method, args.seed, args)
     if args.method == "deflation":
         run_deflation(args, qsc_eq, eq_fit, rec)
+    elif args.method == "deflation_sum":
+        run_deflation(args, qsc_eq, eq_fit, rec, reduction="sum")
     elif args.method == "multistart":
         run_multistart(args, qsc_eq, eq_fit, rec, deflate=False)
     elif args.method == "defl_multistart":

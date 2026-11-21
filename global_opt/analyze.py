@@ -336,12 +336,14 @@ def stage1_table(runs):
 
 NAE_LABELS = {
     "deflation": "Deflation (tutorial Algorithm 1)",
+    "deflation_sum": "Deflation, sum-reduction (paper eq. 4.4)",
     "multistart": "Multistart (shape perturbations)",
     "defl_multistart": "Deflated multistart (new)",
     "qs_pool": "QS-guided deflated pool (new)",
 }
 NAE_COLORS = {
     "deflation": BASELINE_COLOR,
+    "deflation_sum": "#eda100",
     "multistart": "#2a78d6",
     "defl_multistart": "#1baf7a",
     "qs_pool": "#6250d6",

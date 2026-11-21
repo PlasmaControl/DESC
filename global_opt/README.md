@@ -176,8 +176,8 @@ result = basin_hopping(problem, x0=res0["x"], sigma=1.0, temperature=0.5,
 coilset.save("best_coils.h5")                           # coilset now holds the best found
 ```
 
-* With many Fourier modes, keep perturbations smooth. For example, the coilset
-  in this repo has 20 coils × 151 modes; use a larger `alpha` or
+* With many Fourier modes, keep perturbations smooth. For example, for a coilset
+  with 20 coils × 151 modes each, use a larger `alpha` or
   `max_order=...` (perturb only |n| ≤ max_order). Otherwise each hop is mostly
   high-frequency noise that the local solve has to undo.
 * Multistart and independent basin-hopping seeds are embarrassingly parallel:
@@ -258,7 +258,7 @@ local optimization.
 ## Reproducing
 
 ```bash
-pip install -e /path/to/DESC cma
+pip install -e . cma            # from the DESC repo root
 cd global_opt
 # stage two: 20 min per method on 3 cores
 ./run_stage2_all.sh                                        # seed 0, all methods

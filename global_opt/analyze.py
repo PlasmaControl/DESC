@@ -532,7 +532,18 @@ SS_LABELS = {
     "baseline": "Single proximal-lsq-exact solve",
     "converged": "Same solve, tight tolerances",
     "pool": "Deflated pool search",
+    "polished": "Pool search's best, tight tolerances",
 }
+
+
+def ss_polished(runs):
+    """Tight-tolerance polishes of the pool results (``converged_from_pool_seed<s>``),
+    as {pool seed: run}."""
+    out = {}
+    for k, v in runs.items():
+        if k.startswith("converged_from_pool_seed"):
+            out[int(k[len("converged_from_pool_seed"):])] = v[0]
+    return out
 
 
 def ss_table(runs):
@@ -543,13 +554,18 @@ def ss_table(runs):
         "| Coil lengths [m] | Local solves | Wall [min] |",
         "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
-    for k in ["baseline", "converged", "pool"]:
-        for d in sorted(runs.get(k, []), key=lambda d: d["seed"]):
+    pol = ss_polished(runs)
+    groups = [(k, sorted(runs.get(k, []), key=lambda d: d["seed"]))
+              for k in ["baseline", "converged", "pool"]]
+    groups.append(("polished", [pol[s] for s in sorted(pol)]))
+    for k, ds in groups:
+        for d in ds:
             m = d["metrics"]
             t = m["terms"]
             other = sum(v for n, v in t.items() if n not in ("qs", "boundary error"))
+            seed = {"pool": d["seed"], "polished": (d.get("start") or "–")[-1]}.get(k, "–")
             rows.append(
-                f"| {SS_LABELS[k]} | {d['seed'] if k == 'pool' else '–'} "
+                f"| {SS_LABELS[k]} | {seed} "
                 f"| {d['best_cost']:.2f} | {t['qs']:.2f} | {t['boundary error']:.2f} "
                 f"| {other:.3f} | {m['Bn_over_B']:.2e} | {m['aspect_ratio']:.3f} "
                 f"| {m['iota_edge']:.4f} | {m['force_residual_rms']:.1e} "
@@ -581,6 +597,10 @@ def ss_plots(runs):
                 alpha=[1.0, 0.55, 0.35][min(i, 2)],
                 label=f"deflated pool search, seed {d['seed']}")
         ax.plot(t[-1], c[-1], "o", ms=5, color=COLORS["pool"], mec="white", mew=1.2)
+        p = ss_polished(runs).get(d["seed"])
+        if p is not None:  # same minimum, polished to tight tolerances afterwards
+            ax.plot(t[-1], p["best_cost"], "o", ms=6, mfc="white", mec=COLORS["pool"],
+                    mew=1.5, label="after tight-tolerance polish" if i == 0 else None)
     ax.set_yscale("log")
     ax.set_xlabel("wall-clock time [min]", color="#52514e")
     ax.set_ylabel("best objective found", color="#52514e")
@@ -614,12 +634,23 @@ def ss_fields(runs):
     import desc.examples
 
     d0 = os.path.join(RES, "single_stage")
-    best = min(runs.get("pool", []), key=lambda d: d["best_cost"])
-    cases = [
-        ("single solve", "baseline_seed0", BASELINE_COLOR, runs["baseline"][0]["best_cost"]),
-        (f"pool search, seed {best['seed']}", f"pool_seed{best['seed']}", COLORS["pool"],
-         best["best_cost"]),
-    ]
+    # compare at convergence when the tight-tolerance runs exist
+    pol = ss_polished(runs)
+    if pol:
+        s, best = min(pol.items(), key=lambda kv: kv[1]["best_cost"])
+        pool_case = (f"pool search best (seed {s}), polished",
+                     f"converged_from_pool_seed{s}_seed0", best["best_cost"])
+    else:
+        best = min(runs.get("pool", []), key=lambda d: d["best_cost"])
+        pool_case = (f"pool search, seed {best['seed']}", f"pool_seed{best['seed']}",
+                     best["best_cost"])
+    if runs.get("converged"):
+        one = ("single solve, tight tolerances", "converged_seed0",
+               runs["converged"][0]["best_cost"])
+    else:
+        one = ("single solve", "baseline_seed0", runs["baseline"][0]["best_cost"])
+    cases = [(one[0], one[1], BASELINE_COLOR, one[2]),
+             (pool_case[0], pool_case[1], COLORS["pool"], pool_case[2])]
     eq0 = desc.examples.get("precise_QA")
     fig = plt.figure(figsize=(12.5, 4.0), dpi=150)
     gs = fig.add_gridspec(1, 4, width_ratios=[1, 1, 0.06, 1.25], wspace=0.35)

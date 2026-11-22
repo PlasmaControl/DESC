@@ -29,7 +29,10 @@ baseline
     1e-4): the usual single-stage procedure.
 converged
     The same solve to tight tolerances (1e-8, up to 500 iterations), to check that
-    the baseline stops at a genuine local minimum.
+    the baseline stops at a genuine local minimum. With ``--start TAG`` it starts
+    instead from a saved result (``results/single_stage/TAG_eq.h5`` and
+    ``TAG_coilset.h5``), e.g. ``--start pool_seed0`` polishes pool search's best to
+    the same tolerances, so the two are compared at convergence.
 pool
     Deflated pool search (:func:`desc_global.pool_search`) for ``--budget`` seconds.
 
@@ -38,6 +41,7 @@ Usage::
     python single_stage_precise_QA.py --method probe        # term values, timing
     python single_stage_precise_QA.py --method baseline
     python single_stage_precise_QA.py --method pool --budget 7200 --seed 0
+    python single_stage_precise_QA.py --method converged --start pool_seed0
 
 Results go to ``results/single_stage/<method>_seed<seed>.json`` with the final
 equilibrium and coils (``_eq.h5``, ``_coilset.h5``).
@@ -161,6 +165,18 @@ def load_start_coils(coilset):
         c.params_dict = d
 
 
+def load_saved(eq, coilset, tag):
+    """Set the equilibrium and coils to a saved result ``OUTDIR/<tag>_*.h5``.
+
+    As with :func:`load_start_coils`, call this after the objective is built, so
+    the normalizations (and therefore the costs) are those of every other run.
+    """
+    eq.params_dict = load(os.path.join(OUTDIR, f"{tag}_eq.h5")).params_dict
+    saved = load(os.path.join(OUTDIR, f"{tag}_coilset.h5"))
+    for c, d in zip(coilset, saved.params_dict):
+        c.params_dict = d
+
+
 def term_costs(objective):
     """Cost 0.5 * ||f_i||^2 of every term at the things' current state."""
     x = objective.x(*objective.things)
@@ -210,8 +226,16 @@ def main():
                     help="kick scale of plasma boundary coefficients [m]")
     ap.add_argument("--w-qs", type=float, default=None)
     ap.add_argument("--w-be", type=float, default=None)
-    ap.add_argument("--tag", default="")
+    ap.add_argument("--tag", default=None,
+                    help="added to the output name (default: '_from_<start>' with "
+                    "--start, else none)")
+    ap.add_argument("--start", default=None,
+                    help="baseline/converged: start from results/single_stage/<START>_*.h5")
     args = ap.parse_args()
+    if args.tag is None:
+        args.tag = f"_from_{args.start}" if args.start else ""
+    if args.start and args.method not in ("baseline", "converged"):
+        ap.error("--start applies to baseline and converged only")
     warnings.simplefilter("ignore")
     os.makedirs(OUTDIR, exist_ok=True)
     t0 = time.time()
@@ -236,6 +260,8 @@ def main():
     )
     print(f"built in {time.time() - t0:.0f}s", flush=True)
     load_start_coils(coilset)
+    if args.start:
+        load_saved(eq, coilset, args.start)
     x0 = problem.x_full()
     if args.method == "probe":
         print("term costs at the start (weights", dict(WEIGHTS, **w), "):")
@@ -261,7 +287,7 @@ def main():
     summary = dict(
         method=args.method, tag=args.tag, seed=args.seed, M=args.M, kmax=args.kmax,
         maxiter=args.maxiter, length_scale=args.length_scale,
-        boundary_scale=args.boundary_scale, budget=args.budget,
+        boundary_scale=args.boundary_scale, budget=args.budget, start=args.start,
         weights=dict(WEIGHTS, **w), wall_time=time.time() - t0,
         n_local_solves=problem.nlocal, best_cost=float(result["cost"]), metrics=met,
         trace=result["trace"],

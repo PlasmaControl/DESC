@@ -197,6 +197,12 @@ def main():
         help="leave coil rotmat/shift free (as in results/stage2); default fixes them "
         "like DESC's Optimizer and writes to results/stage2_fixed",
     )
+    p.add_argument(
+        "--temperature",
+        type=float,
+        default=None,
+        help="noisy gradient: initial temperature T0 (default 0.3 * sigma**2)",
+    )
     p.add_argument("--tag", default="")
     p.add_argument("--smoke", action="store_true", help="tiny budgets for testing")
     args = p.parse_args()
@@ -276,7 +282,9 @@ def main():
             problem,
             n_cycles=1 if smoke else 1000,
             steps_per_cycle=20 if smoke else 200,
-            temperature0=0.3 * args.sigma**2,
+            temperature0=(
+                0.3 * args.sigma**2 if args.temperature is None else args.temperature
+            ),
             x0=res0["x"],
             seed=args.seed,
             time_budget=30 if smoke else args.budget - res0["time"],
@@ -300,6 +308,7 @@ def main():
         free_curve_frame=args.free_frame,
         seed=args.seed,
         sigma=args.sigma,
+        temperature=args.temperature,
         length_scale=args.length_scale,
         budget=args.budget,
         wall_time=time.time() - t0,

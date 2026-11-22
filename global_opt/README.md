@@ -363,8 +363,9 @@ Those trials are rejected automatically, but they waste time, so keep
 
 ## Using this on your own problems
 
-The tools work for any DESC problem whose constraints are linear: coil
-optimization, fixed-boundary optimization with `lsq-exact`, and so on:
+The tools take any DESC `ObjectiveFunction`, over one or several optimized
+things (a CoilSet, an Equilibrium, or both), with the constraints you would pass
+to `Optimizer.optimize`. A coil problem looks like this:
 
 ```python
 from desc_global import ProjectedProblem, basin_hopping, multistart, annealed_noisy_gradient
@@ -399,10 +400,45 @@ coilset.save("best_coils.h5")                           # coilset now holds the 
   objective the better minima come partly from longer, closer-packed coils.
   Decide whether that's acceptable, and tighten the bounds or raise the weights
   if not.
-* For equilibrium (stage-one / free-boundary) problems, `ForceBalance` needs
-  `ProximalProjection`, which `ProjectedProblem` does not wrap. Follow
-  `stage1_precise_QA.py` instead: perturb with `Equilibrium.perturb` and re-run
-  `eq.optimize`.
+
+### Several things, and single-stage problems
+
+* **Several optimized things** work with every strategy, deflation included: the
+  state vector, the perturbation scales and the deflation distance all run over
+  the things' parameters, concatenated in the objective's order.
+* **Force balance as a constraint** (stage one, free boundary, single-stage with
+  coils) also works. If any constraint is nonlinear, `ProjectedProblem` wraps the
+  objective in a `ProximalProjection`, as DESC's `proximal-lsq-exact` does, and
+  re-solves the equilibrium at the start of every local solve. Multistart, basin
+  hopping and pool search (with or without deflation) then work unchanged.
+  CMA-ES and the noisy gradient raise an error: they need the cost at points
+  that are not equilibria.
+* Only the equilibrium's boundary (`Rb_lmn`, `Zb_lmn`) is perturbed; the interior
+  follows from the solve. Boundary and coil coefficients share `length_scale`.
+  Pass `overrides={"Rb_lmn": ..., "Zb_lmn": ...}` (a number, array or function
+  of the equilibrium) to kick the boundary less than the coils.
+* `example_single_stage.py` is a small worked example: the precise QA
+  equilibrium at L = M = N = 4 with the tutorial's three coils, aspect ratio,
+  `VacuumBoundaryError(eq, coils, field_fixed=False)`, coil length and
+  plasma-coil distance, with `ForceBalance` as a constraint:
+
+```python
+problem = ProjectedProblem(
+    [eq, coilset], objective,
+    (ForceBalance(eq), FixPressure(eq), FixCurrent(eq), FixPsi(eq),
+     FixCoilCurrent(coilset, indices=[True, False, False])),
+    local_kwargs=dict(maxiter=50), length_scale=0.02, deflation_slots=8,
+)
+result = pool_search(problem, x0=problem.x_full(), time_budget=3600)
+```
+
+  It has only been run as a smoke test, with 6 iterations per local solve. The
+  start polished to 1.1e-5. Basin hopping's two hops were both worse; pool
+  search's first hop found 2.5e-6, and the race abandoned the next two. These
+  numbers are not a benchmark.
+* `stage1_precise_QA.py` predates this support and drives `eq.optimize`
+  directly with `Equilibrium.perturb` kicks; it gives the same kind of search for
+  stage one.
 
 ## Files
 
@@ -415,6 +451,7 @@ coilset.save("best_coils.h5")                           # coilset now holds the 
 | `run_stage1_all.sh` | Same for stage one |
 | `nae_global.py` | NAE-constrained equilibria (deflation tutorial problem): tutorial deflation, sum-form deflation, multistart, deflated multistart, QS-guided pool |
 | `analyze.py` | Builds `results/summary.md` and `figures/` |
+| `example_single_stage.py` | Small single-stage example (equilibrium and coils both vary, `ForceBalance` as a constraint): basin hopping and deflated pool search |
 | `diag_noisy.py` | Diagnostic for the noisy gradient: independent excursions from one stored minimum, with their end and polished costs and how far they travelled |
 | `results/stage2_fixed/*.json`, `*_coilset.h5` | Stage two with the coil frame fixed (the results above): per-run summaries (cost trace, every local minimum found, metrics) and the best coilsets; `*_matched_*` = matched-bounds variant |
 | `results/stage2/*.json`, `*_coilset.h5` | The same for the earlier free-frame runs (rounds one and two); `*_tight_*` = tight-bounds variant |

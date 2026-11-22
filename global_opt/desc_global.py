@@ -48,12 +48,18 @@ Every strategy returns a :class:`GlobalResult` (best ``x`` and ``cost``, every l
 minimum visited in ``history``, and the best-so-far ``trace`` against wall time) and
 leaves the optimizable objects in the best state found.
 
-Only problems whose constraints are all linear (``FixCoilCurrent``,
-``FixParameters``, ``FixSumCoilCurrent``, ...) are handled by
-:class:`ProjectedProblem`. That covers the usual stage-two problem. For stage one
-(``proximal-lsq-exact``, where the equilibrium is re-solved at every step) see
-``stage1_precise_QA.py``, which uses the same perturbation machinery around
-``Equilibrium.optimize``.
+Which problems work: any DESC ``ObjectiveFunction``, over one or several
+optimizable things (e.g. a CoilSet, an Equilibrium, or both). Linear constraints
+(``FixCoilCurrent``, ``FixParameters``, ``FixPsi``, ...) are projected out. A
+nonlinear constraint, typically ``ForceBalance`` when the Equilibrium itself is
+optimized (stage one, free boundary, single-stage with coils), is handled the way
+DESC's ``proximal-`` methods handle it: a ``ProximalProjection`` re-solves the
+equilibrium for every new boundary. Then :func:`multistart`, :func:`basin_hopping`
+and :func:`pool_search` work, while :func:`cma_es` and
+:func:`annealed_noisy_gradient` do not, since they need the cost at points that are
+not equilibria. ``example_single_stage.py`` shows a small single-stage problem.
+``stage1_precise_QA.py`` predates this and drives ``Equilibrium.optimize``
+directly.
 """
 
 import time
@@ -66,7 +72,7 @@ from desc.backend import jnp
 from desc.objectives import ObjectiveFunction
 from desc.objectives.objective_funs import _Objective
 from desc.optimizable import OptimizableCollection
-from desc.optimize import LinearConstraintProjection, Optimizer
+from desc.optimize import LinearConstraintProjection, Optimizer, ProximalProjection
 
 # ---------------------------------------------------------------------------
 # Perturbation scales
@@ -207,9 +213,9 @@ class ScaledDeflation(_Objective):
 
     Parameters
     ----------
-    thing : Optimizable
-        The single optimizable object (e.g. a CoilSet) whose packed parameter
-        vector ``x`` is deflated.
+    things : Optimizable or list of Optimizable
+        The optimizable objects (e.g. a CoilSet, or an Equilibrium and a CoilSet)
+        whose packed parameter vectors, concatenated in this order, form ``x``.
     scales : ndarray
         Perturbation scale of every entry of ``x`` (:func:`perturbation_scales`).
         Entries with zero scale are ignored in the distance; the RMS is over the
@@ -233,7 +239,7 @@ class ScaledDeflation(_Objective):
     _static_attrs = _Objective._static_attrs + ["_n_slots", "_power", "_reduction"]
 
     def __init__(
-        self, thing, scales, n_slots=8, power=2, reduction="sum", name="scaled deflation"
+        self, things, scales, n_slots=8, power=2, reduction="sum", name="scaled deflation"
     ):
         self._n_slots = int(n_slots)
         self._power = float(power)
@@ -247,8 +253,9 @@ class ScaledDeflation(_Objective):
         self._active = jnp.zeros(self._n_slots)
         self._weight = jnp.asarray(0.0)
         self._radius = jnp.asarray(1.0)
+        things = list(things) if isinstance(things, (list, tuple)) else [things]
         super().__init__(
-            things=thing, target=0, weight=1, normalize=False, normalize_target=False,
+            things=things, target=0, weight=1, normalize=False, normalize_target=False,
             name=name,
         )
 
@@ -257,9 +264,15 @@ class ScaledDeflation(_Objective):
         self._dim_f = 1
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
-        """Hinge residual ``w * max(0, M(x) - r^-p)``, shape (1,)."""
-        x = self.things[0].pack_params(params)
+    def compute(self, *params, constants=None):
+        """Hinge residual ``w * max(0, M(x) - r^-p)``, shape (1,).
+
+        ``params`` holds one parameter dict per thing, in the order of ``things``;
+        ``x`` is their packed parameters, concatenated in that order.
+        """
+        x = jnp.concatenate(
+            [t.pack_params(p) for t, p in zip(self.things, params)]
+        )
         diff = (x[None, :] - self._centers) * self._inv_scale[None, :]
         d2 = jnp.sum(diff**2, axis=1) / self._n_eff + 1e-12
         Mi = self._active * d2 ** (-self._power / 2)
@@ -282,8 +295,13 @@ class ProjectedProblem:
         Things being optimized (e.g. a CoilSet). Must match ``objective.things``.
     objective : ObjectiveFunction
         Objective to minimize, in least-squares form.
-    constraints : tuple of linear _Objective
-        Linear constraints (e.g. ``FixCoilCurrent``).
+    constraints : tuple of _Objective
+        Constraints (e.g. ``FixCoilCurrent``). Linear ones are projected out. If
+        any is nonlinear (e.g. ``ForceBalance`` for an Equilibrium being optimized,
+        as in single-stage optimization), the objective is wrapped in a
+        ``ProximalProjection`` as DESC's ``proximal-`` methods do; then CMA-ES and
+        the noisy gradient are unavailable, since they need the cost at arbitrary
+        points.
     local_method : str
         DESC optimizer used for local solves, e.g. ``"lsq-exact"``.
     local_kwargs : dict
@@ -292,8 +310,11 @@ class ProjectedProblem:
         Passed to :func:`perturbation_scales`.
     deflation_slots : int
         If > 0, a :class:`ScaledDeflation` term with this many centers is appended to
-        the objective (inactive until :meth:`set_deflation` is called). Requires a
-        single optimizable thing.
+        the objective (inactive until :meth:`set_deflation` is called). It acts on
+        the full state vector of every optimized thing.
+    proximal_options : dict, optional
+        With nonlinear constraints: ``perturb_options`` and ``solve_options`` for the
+        ProximalProjection's equilibrium updates, as in ``Optimizer.optimize``.
     free_curve_frame : bool
         DESC's ``Optimizer.optimize`` adds self-consistency constraints for every
         optimized thing; for curves these fix ``shift`` and ``rotmat``, which are
@@ -340,6 +361,7 @@ class ProjectedProblem:
         deflation_slots=0,
         deflation_reduction="sum",
         free_curve_frame=False,
+        proximal_options=None,
     ):
         self.things = list(things) if isinstance(things, (list, tuple)) else [things]
         self.verbose = verbose
@@ -360,10 +382,10 @@ class ProjectedProblem:
         )
         self.deflation = None
         if deflation_slots:
-            if len(obj_things) != 1:
-                raise ValueError("deflation needs a single optimizable thing")
+            # obj_things is in the order of objective.x, so the deflated vector is
+            # exactly the full state vector the strategies work with
             self.deflation = ScaledDeflation(
-                obj_things[0], self.scales, deflation_slots, reduction=deflation_reduction
+                obj_things, self.scales, deflation_slots, reduction=deflation_reduction
             )
             objective = ObjectiveFunction(
                 tuple(objective.objectives) + (self.deflation,)
@@ -376,19 +398,52 @@ class ProjectedProblem:
         # the redundant ``shift`` and ``rotmat`` unless ``free_curve_frame``.
         from desc.equilibrium import Equilibrium
         from desc.objectives.getters import maybe_add_self_consistency
+        from desc.optimize.optimizer import _parse_constraints
 
-        constraints = tuple(constraints)
-        for t in obj_things:
-            if isinstance(t, Equilibrium) or not free_curve_frame:
-                constraints = maybe_add_self_consistency(t, constraints)
-        constraint = ObjectiveFunction(tuple(constraints))
-        constraint.build(verbose=0)
         self.objective = objective
         if not all(a is b for a, b in zip(objective.things, obj_things)):
             raise RuntimeError("unexpected ordering of optimizable things")
-        self.proj = LinearConstraintProjection(objective, constraint)
+        linear, nonlinear = _parse_constraints(tuple(constraints))
+        # Nonlinear constraints (e.g. ForceBalance) are handled as DESC's
+        # "proximal-" methods do: a ProximalProjection re-solves the equilibrium for
+        # every new boundary, and the linear constraints are projected out of the
+        # ProximalProjection's variables (boundary, profiles, other things).
+        self.proximal = len(nonlinear) > 0
+        self._prox = None
+        if self.proximal:
+            eqs = [t for t in obj_things if isinstance(t, Equilibrium)]
+            if len(eqs) != 1:
+                raise ValueError(
+                    "nonlinear constraints need exactly one Equilibrium being optimized"
+                )
+            opts = dict(proximal_options or {})
+            self._prox = ProximalProjection(
+                objective,
+                constraint=ObjectiveFunction(nonlinear),
+                eq=eqs[0],
+                perturb_options=opts.get("perturb_options"),
+                solve_options=opts.get("solve_options"),
+            )
+            self._prox.build(verbose=0)
+            inner = self._prox
+        else:
+            inner = objective
+        for t in obj_things:
+            if isinstance(t, Equilibrium):
+                # with a ProximalProjection the equilibrium's self-consistency is
+                # handled by its own fixed-boundary solve (as in Optimizer.optimize)
+                if not self.proximal:
+                    linear = maybe_add_self_consistency(t, linear)
+            elif not free_curve_frame:
+                linear = maybe_add_self_consistency(t, linear)
+        if not linear:
+            raise ValueError("ProjectedProblem needs at least one linear constraint")
+        constraint = ObjectiveFunction(tuple(linear))
+        constraint.build(verbose=0)
+        self.proj = LinearConstraintProjection(inner, constraint)
         self.proj.build(verbose=0)
-        self.optimizer = Optimizer(local_method)
+        # the wrappers are prebuilt, so the local solver is the plain method
+        self.optimizer = Optimizer(local_method.replace("proximal-", ""))
         self.local_kwargs = dict(maxiter=100, ftol=1e-4, xtol=1e-6, gtol=1e-8)
         self.local_kwargs.update({} if local_kwargs is None else local_kwargs)
         self._fun = lambda z: self.proj.compute_scaled_error(z, self.proj.constants)
@@ -420,27 +475,84 @@ class ProjectedProblem:
         for t, p in zip(self.objective.things, params):
             t.params_dict = p
 
+    def _to_prox(self, x):
+        """ProximalProjection variables of a full vector (equilibrium interior dropped)."""
+        params = self.objective.unpack_state(jnp.asarray(x), per_objective=False)
+        out = []
+        for t, p in zip(self._prox.things, params):
+            if t is self._prox._eq:
+                out += [jnp.atleast_1d(p[arg]) for arg in self._prox._args]
+            else:
+                out += [t.pack_params(p)]
+        return jnp.concatenate(out)
+
+    def _from_prox(self, xp, x_like):
+        """Full vector from ProximalProjection variables, interior taken from x_like."""
+        new = self._prox.unpack_state(jnp.asarray(xp), per_objective=False)
+        old = self.objective.unpack_state(jnp.asarray(x_like), per_objective=False)
+        out = []
+        for t, pn, po in zip(self._prox.things, new, old):
+            if t is self._prox._eq:
+                pn = {k: (pn[k] if k in self._prox._args else po[k]) for k in po}
+            out.append(t.pack_params(pn))
+        return np.asarray(jnp.concatenate(out))
+
+    def _require_linear(self, what):
+        if self.proximal:
+            raise NotImplementedError(
+                f"{what} needs a problem with only linear constraints: with a "
+                "nonlinear constraint (e.g. ForceBalance) the cost at an arbitrary "
+                "point needs an equilibrium solve. Use multistart, basin_hopping or "
+                "pool_search instead."
+            )
+
     def project(self, x):
         """Reduced variables ``z`` of a full vector ``x``."""
+        if self.proximal:
+            return self.proj.project(self._to_prox(x))
         return self.proj.project(jnp.asarray(x))
 
     def recover(self, z):
-        """Full vector ``x`` of reduced variables ``z`` (satisfies the constraints)."""
+        """Full vector ``x`` of reduced variables ``z`` (satisfies the constraints).
+
+        Not available with nonlinear constraints, where the equilibrium interior
+        would need a solve; use :meth:`feasible` there.
+        """
+        self._require_linear("recover")
         return np.asarray(self.proj.recover(jnp.asarray(z)))
 
     def feasible(self, x):
-        """Orthogonally project a full vector onto the linear constraints."""
+        """Orthogonally project a full vector onto the linear constraints.
+
+        With nonlinear constraints only the ProximalProjection variables (boundary,
+        profiles, other things) are projected; the equilibrium interior is kept and
+        re-solved by :meth:`local_solve`.
+        """
+        if self.proximal:
+            xp = self.proj.recover(self.proj.project(self._to_prox(x)))
+            return self._from_prox(xp, x)
         return self.recover(self.project(x))
 
     # -- evaluations -----------------------------------------------------------
     def cost(self, x):
-        """0.5 * ||f||^2 of the (projected) full vector x; inf if not finite."""
+        """0.5 * ||f||^2 of the (projected) full vector x; inf if not finite.
+
+        With nonlinear constraints, x must already satisfy them (e.g. the result of
+        :meth:`local_solve`); the objective is then evaluated directly.
+        """
         self.nfev += 1
-        c = float(0.5 * jnp.sum(self._fun(self.project(x)) ** 2))
+        if self.proximal:
+            f = self.objective.compute_scaled_error(
+                jnp.asarray(x), self.objective.constants
+            )
+        else:
+            f = self._fun(self.project(x))
+        c = float(0.5 * jnp.sum(f**2))
         return c if np.isfinite(c) else np.inf
 
     def cost_batch(self, X):
         """Costs of a batch of full vectors, evaluated in one vmapped call."""
+        self._require_linear("cost_batch (used by cma_es)")
         Z = jax.vmap(self.proj.project)(jnp.asarray(X))
         self.nfev += len(X)
         c = np.asarray(0.5 * jnp.sum(self._fun_batch(Z) ** 2, axis=1))
@@ -448,6 +560,7 @@ class ProjectedProblem:
 
     def value_and_grad_z(self, z):
         """Cost ``0.5 * ||f||^2`` and its gradient with respect to ``z``."""
+        self._require_linear("value_and_grad_z (used by annealed_noisy_gradient)")
         self.nfev += 1
         self.ngev += 1
         c, g = self._val_and_grad(jnp.asarray(z))
@@ -506,6 +619,8 @@ class ProjectedProblem:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             try:
+                if self.proximal:
+                    self._reset_proximal()
                 _, res = self.optimizer.optimize(
                     self.objective.things,
                     objective=self.proj,
@@ -526,6 +641,25 @@ class ProjectedProblem:
         return dict(
             x=xn, cost=cost, nit=nit, nfev=nfev, njev=njev, time=time.time() - t0
         )
+
+    def _reset_proximal(self):
+        """Restart the ProximalProjection from the current state of the things.
+
+        The ProximalProjection keeps the last solved equilibrium and perturbs from it
+        at every step. A new local solve starts somewhere else (a kicked minimum), so
+        first re-solve the equilibrium for the current boundary with the
+        ProximalProjection's own compiled fixed-boundary problem, then make that the
+        stored state, as ``ProximalProjection.build`` does, without recompiling.
+        """
+        prox = self._prox
+        eq = prox._eq
+        prox._eq_solve_objective.update_constraint_target(eq)
+        eq.solve(objective=prox._eq_solve_objective, constraints=None, **prox._solve_options)
+        prox._x_old = prox.x(*prox.things)
+        prox._allx = [prox._x_old]
+        prox._allxopt = [prox._objective.x(*prox.things)]
+        prox._allxeq = [eq.pack_params(eq.params_dict)]
+        prox.history = [[t.params_dict.copy() for t in prox.things]]
 
     def elapsed(self):
         """Seconds since the problem was built."""

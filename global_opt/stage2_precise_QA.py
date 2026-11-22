@@ -203,6 +203,13 @@ def main():
         default=None,
         help="noisy gradient: initial temperature T0 (default 0.3 * sigma**2)",
     )
+    p.add_argument(
+        "--target-ratio",
+        type=float,
+        default=None,
+        help="noisy gradient: adapt T0 so excursions end near this multiple of the "
+        "incumbent's cost",
+    )
     p.add_argument("--tag", default="")
     p.add_argument("--smoke", action="store_true", help="tiny budgets for testing")
     args = p.parse_args()
@@ -287,6 +294,7 @@ def main():
             ),
             x0=res0["x"],
             seed=args.seed,
+            target_ratio=args.target_ratio,
             time_budget=30 if smoke else args.budget - res0["time"],
         )
         result["history"].insert(0, dict(cost=res0["cost"], x=res0["x"]))
@@ -309,6 +317,7 @@ def main():
         seed=args.seed,
         sigma=args.sigma,
         temperature=args.temperature,
+        target_ratio=args.target_ratio,
         length_scale=args.length_scale,
         budget=args.budget,
         wall_time=time.time() - t0,
@@ -329,7 +338,7 @@ def main():
             {k: (float(v) if isinstance(v, (float, np.floating)) else v)
              for k, v in h.items() if k != "x"}
             for h in result["history"]
-        ] if m in ("pool", "pool_nodefl") else None,
+        ] if m in ("pool", "pool_nodefl", "noisy") else None,
     )
     print(json.dumps({k: v for k, v in summary.items() if k != "trace"}, indent=1))
     with open(os.path.join(outdir, f"{tag}.json"), "w") as f:

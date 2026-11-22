@@ -856,6 +856,9 @@ def annealed_noisy_gradient(
     seed=0,
     beta1=0.9,
     beta2=0.999,
+    target_ratio=None,
+    adapt_factor=0.7,
+    temperature_bounds=(1e-3, 1.0),
     time_budget=np.inf,
     **local_kwargs,
 ):
@@ -875,6 +878,14 @@ def annealed_noisy_gradient(
     Pass a local minimum as ``x0`` (e.g. the result of ``problem.local_solve``): a
     first-order method is slow on the initial large descent, which the local
     least-squares solver does much faster.
+
+    The Adam step is normalized, so the gradient cannot push back harder on steep
+    walls, and the noise sets how far an excursion goes. If the temperature is too
+    high, an excursion ends far uphill and the polish lands in a random basin. With
+    ``target_ratio`` set, ``temperature0`` adapts after every cycle: it is
+    multiplied by ``adapt_factor`` if the excursion ended above ``target_ratio``
+    times the incumbent's cost, and divided by it otherwise (within
+    ``temperature_bounds``).
     """
     t0 = time.time()
     rng = np.random.default_rng(seed)
@@ -909,20 +920,33 @@ def annealed_noisy_gradient(
                 x_cur = problem.recover(z)
                 xn = problem.perturb(x_cur, np.sqrt(2 * lr * T), rng)
                 z = np.asarray(problem.project(xn))
+        T_used = temperature0
+        if target_ratio is not None:
+            up = (not np.isfinite(c)) or c > target_ratio * c_inc
+            temperature0 = float(np.clip(
+                temperature0 * (adapt_factor if up else 1 / adapt_factor),
+                *temperature_bounds,
+            ))
         if not np.isfinite(c):
-            history.append(dict(cycle=cyc, raw=np.inf, cost=np.inf, accepted=False))
+            history.append(
+                dict(cycle=cyc, raw=np.inf, cost=np.inf, accepted=False, T0=T_used)
+            )
             continue
         res = problem.local_solve(problem.recover(z), **local_kwargs)
         accept = res["cost"] < c_inc
         if accept:
             x_inc, c_inc = res["x"], res["cost"]
         history.append(
-            dict(cycle=cyc, raw=float(c), cost=res["cost"], accepted=accept, x=res["x"])
+            dict(
+                cycle=cyc, raw=float(c), cost=res["cost"], accepted=accept, x=res["x"],
+                T0=T_used,
+            )
         )
         _record(problem, trace, c_inc, f"cycle {cyc}")
         if problem.verbose:
             print(
                 f"[noisy-grad] cycle {cyc:3d}: end of excursion {c:.4e} -> polished "
                 f"{res['cost']:.4e} {'ACC' if accept else 'rej'}  best {c_inc:.4e}"
+                f"  T0 {T_used:.3g}"
             )
     return _finish(problem, x_inc, c_inc, history, trace, "annealed_noisy_gradient", t0)

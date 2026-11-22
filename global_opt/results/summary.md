@@ -103,6 +103,17 @@
 | Basin hopping, matched bounds | 0 | 14.24 | 14.14 | 2.56e-04 | 0.105 | 0.348 | 2.000 | 7.81, 6.64, 6.80 | 32 | 1253 |
 | Deflated pool search (new), matched bounds | 0 | 9.10 | 9.06 | 1.92e-04 | 0.105 | 0.336 | 2.000 | 7.81, 7.16, 7.33 | 68 | 1218 |
 
+## Single stage: precise QA and its coils together (L = M = N = 6)
+
+| Method | Seed | Best cost | QS term | Boundary-error term | Other terms | <\|B·n\|>/<\|B\|> | Aspect ratio | ι (edge) | Force residual (rms) | Coil lengths [m] | Local solves | Wall [min] |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Single proximal-lsq-exact solve | – | 40.11 | 38.40 | 1.66 | 0.053 | 6.01e-04 | 6.000 | 0.4199 | 1.3e-05 | 7.48, 6.91, 7.01 | 1 | 9 |
+| Same solve, tight tolerances | – | 37.11 | 35.48 | 1.59 | 0.040 | 5.94e-04 | 6.000 | 0.4199 | 1.2e-05 | 7.50, 6.93, 7.03 | 1 | 12 |
+| Deflated pool search | 0 | 18.56 | 17.26 | 0.53 | 0.766 | 4.88e-04 | 6.000 | 0.4199 | 9.8e-06 | 9.33, 8.68, 8.52 | 80 | 122 |
+| Deflated pool search | 2 | 22.37 | 21.44 | 0.54 | 0.388 | 3.32e-04 | 6.000 | 0.4199 | 1.1e-05 | 8.37, 7.68, 7.75 | 81 | 123 |
+| Pool search's best, tight tolerances | 0 | 18.56 | 17.26 | 0.53 | 0.765 | 4.88e-04 | 6.000 | 0.4199 | 9.8e-06 | 9.33, 8.68, 8.52 | 1 | 7 |
+| Pool search's best, tight tolerances | 2 | 22.37 | 21.44 | 0.54 | 0.388 | 3.32e-04 | 6.000 | 0.4199 | 1.1e-05 | 8.37, 7.68, 7.75 | 1 | 4 |
+
 ## NAE-constrained equilibria (deflation tutorial problem)
 
 | Method | Seed | Solutions | Valid | Distinct (δ = 0.01 / 0.02 / 0.04 m) | s per solution | Best QS error | Median QS error | ι edge range | Best f_B(ρ=1) |

@@ -524,6 +524,148 @@ def frame_table(free, fixed):
     return "\n".join(rows)
 
 
+# ---------------------------------------------------------------------------
+# single stage (equilibrium and coils together)
+# ---------------------------------------------------------------------------
+
+SS_LABELS = {
+    "baseline": "Single proximal-lsq-exact solve",
+    "converged": "Same solve, tight tolerances",
+    "pool": "Deflated pool search",
+}
+
+
+def ss_table(runs):
+    """Markdown table of the single-stage runs: cost, terms and physics metrics."""
+    rows = [
+        "| Method | Seed | Best cost | QS term | Boundary-error term | Other terms "
+        "| <\\|B·n\\|>/<\\|B\\|> | Aspect ratio | ι (edge) | Force residual (rms) "
+        "| Coil lengths [m] | Local solves | Wall [min] |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+    ]
+    for k in ["baseline", "converged", "pool"]:
+        for d in sorted(runs.get(k, []), key=lambda d: d["seed"]):
+            m = d["metrics"]
+            t = m["terms"]
+            other = sum(v for n, v in t.items() if n not in ("qs", "boundary error"))
+            rows.append(
+                f"| {SS_LABELS[k]} | {d['seed'] if k == 'pool' else '–'} "
+                f"| {d['best_cost']:.2f} | {t['qs']:.2f} | {t['boundary error']:.2f} "
+                f"| {other:.3f} | {m['Bn_over_B']:.2e} | {m['aspect_ratio']:.3f} "
+                f"| {m['iota_edge']:.4f} | {m['force_residual_rms']:.1e} "
+                f"| {', '.join(f'{v:.2f}' for v in m['coil_lengths'])} "
+                f"| {d['n_local_solves']} | {d['wall_time'] / 60:.0f} |"
+            )
+    return "\n".join(rows)
+
+
+def ss_plots(runs):
+    """Single-stage figures: pool search's best cost vs. time, and its minima."""
+    base = runs["baseline"][0]
+    conv = runs.get("converged", [None])[0]
+    fig, ax = plt.subplots(figsize=(7.2, 4.2), dpi=150)
+    _style(ax)
+    for d, ls, lab in ((base, (0, (4, 3)), "single solve"),
+                       (conv, (0, (1, 2)), "same, tight tolerances")):
+        if d is None:
+            continue
+        ax.axhline(d["best_cost"], color=BASELINE_COLOR, lw=1.5, ls=ls)
+        ax.text(0.99, d["best_cost"], f" {lab} ({d['wall_time'] / 60:.0f} min)",
+                color="#52514e", fontsize=8.5, va="bottom", ha="right",
+                transform=ax.get_yaxis_transform())
+    for i, d in enumerate(sorted(runs.get("pool", []), key=lambda d: d["seed"])):
+        tr = [t for t in d["trace"] if np.isfinite(t["best_cost"])]
+        t = [tt["time"] / 60 for tt in tr]
+        c = [tt["best_cost"] for tt in tr]
+        ax.step(t, c, where="post", color=COLORS["pool"], lw=2,
+                alpha=[1.0, 0.55, 0.35][min(i, 2)],
+                label=f"deflated pool search, seed {d['seed']}")
+        ax.plot(t[-1], c[-1], "o", ms=5, color=COLORS["pool"], mec="white", mew=1.2)
+    ax.set_yscale("log")
+    ax.set_xlabel("wall-clock time [min]", color="#52514e")
+    ax.set_ylabel("best objective found", color="#52514e")
+    ax.set_title("Single stage (precise QA + coils, L = M = N = 6): best cost vs. time",
+                 loc="left", fontsize=11, color="#0b0b0b")
+    ax.legend(frameon=False, fontsize=8.5, loc="upper center", bbox_to_anchor=(0.5, -0.2),
+              ncol=3)
+    fig.tight_layout()
+    fig.savefig(os.path.join(FIG, "single_stage_convergence.png"), bbox_inches="tight")
+    plt.close(fig)
+    pr = {f"pool_s{d['seed']}": [d] for d in runs.get("pool", [])}
+    if pr:
+        global COLORS, LABELS
+        for k in pr:
+            COLORS[k] = COLORS["pool"]
+            LABELS[k] = f"Pool search, seed {k[-1]}"
+        plot_minima(pr, os.path.join(FIG, "single_stage_minima.png"), base["best_cost"],
+                    "objective value of each local minimum (log)",
+                    "Single stage: local minima reached (abandoned hops not shown)",
+                    sorted(pr), skip_first=True)
+
+
+def ss_fields(runs):
+    """Plasma cross-sections, coil B.n on the boundary, and coils: start, single
+    solve and the best pool-search result."""
+    import sys
+
+    sys.path.insert(0, HERE)
+    from desc.grid import LinearGrid
+    from desc.io import load as dload
+
+    import desc.examples
+
+    d0 = os.path.join(RES, "single_stage")
+    best = min(runs.get("pool", []), key=lambda d: d["best_cost"])
+    cases = [
+        ("single solve", "baseline_seed0", BASELINE_COLOR, runs["baseline"][0]["best_cost"]),
+        (f"pool search, seed {best['seed']}", f"pool_seed{best['seed']}", COLORS["pool"],
+         best["best_cost"]),
+    ]
+    eq0 = desc.examples.get("precise_QA")
+    fig = plt.figure(figsize=(12.5, 4.0), dpi=150)
+    gs = fig.add_gridspec(1, 4, width_ratios=[1, 1, 0.06, 1.25], wspace=0.35)
+    # B.n / |B| of the coils on each plasma boundary
+    data = []
+    for lab, tag, col, c in cases:
+        eq = dload(os.path.join(d0, f"{tag}_eq.h5"))
+        cs = dload(os.path.join(d0, f"{tag}_coilset.h5"))
+        grid = LinearGrid(M=50, N=50, NFP=1, endpoint=True)
+        Bn, coords = cs.compute_Bnormal(eq.surface, eval_grid=grid)
+        B = np.linalg.norm(cs.compute_magnetic_field(coords), axis=1)
+        data.append((np.asarray(Bn / B).reshape(grid.num_zeta, grid.num_theta), grid, eq, cs))
+    vmax = max(np.abs(d[0]).max() for d in data)
+    for j, ((lab, tag, col, c), (bn, grid, eq, cs)) in enumerate(zip(cases, data)):
+        ax = fig.add_subplot(gs[0, j])
+        th = grid.nodes[grid.unique_theta_idx, 1]
+        ze = grid.nodes[grid.unique_zeta_idx, 2]
+        im = ax.pcolormesh(ze, th, bn.T, cmap="RdBu_r", vmin=-vmax, vmax=vmax,
+                           shading="auto")
+        ax.set_xlabel(r"$\zeta$")
+        ax.set_ylabel(r"$\theta$")
+        ax.set_title(f"{lab} (cost {c:.1f})", fontsize=10, loc="left")
+    fig.colorbar(im, cax=fig.add_subplot(gs[0, 2]), label=r"$B\cdot n\,/\,|B|$ from coils")
+    # plasma cross-sections at zeta = 0 and pi/2 (half a field period apart)
+    ax = fig.add_subplot(gs[0, 3])
+    _style(ax)
+    for eq, lab, col, ls in [(eq0, "start (precise QA)", "#0b0b0b", ":")] + [
+        (d[2], c[0], c[2], "-") for d, c in zip(data, cases)
+    ]:
+        for k, z in enumerate((0.0, np.pi / 2)):
+            g = LinearGrid(rho=np.array([1.0]), M=60, zeta=np.array([z]), NFP=eq.NFP,
+                           endpoint=True)
+            dd = eq.compute(["R", "Z"], grid=g)
+            ax.plot(dd["R"], dd["Z"], color=col, ls=ls, lw=1.4,
+                    label=lab if k == 0 else None)
+    ax.set_aspect("equal")
+    ax.set_xlabel("R [m]", color="#52514e")
+    ax.set_ylabel("Z [m]", color="#52514e")
+    ax.set_title(r"Plasma boundary at $\zeta = 0, \pi/2$", fontsize=10, loc="left")
+    ax.legend(frameon=False, fontsize=8, loc="upper center", bbox_to_anchor=(0.5, -0.18),
+              ncol=1)
+    fig.savefig(os.path.join(FIG, "single_stage_fields.png"), bbox_inches="tight")
+    plt.close(fig)
+
+
 def main():
     """Write ``results/summary.md`` and every figure in ``figures/``."""
     p = argparse.ArgumentParser()
@@ -676,6 +818,13 @@ def main():
                 )
                 if args.fields:
                     stage2_fields(rf, "matched", stage="stage2_fixed")
+    rs = load("single_stage")
+    if rs.get("baseline"):
+        out += ["## Single stage: precise QA and its coils together (L = M = N = 6)", "",
+                ss_table(rs), ""]
+        ss_plots(rs)
+        if args.fields and rs.get("pool"):
+            ss_fields(rs)
     rn = load_nae()
     if rn:
         out += ["## NAE-constrained equilibria (deflation tutorial problem)", "", nae_table(rn), ""]

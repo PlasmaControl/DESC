@@ -84,15 +84,18 @@ OUTDIR = os.path.join(HERE, "results", "single_stage")
 START_COILS = os.path.join(HERE, "results", "stage2_fixed", "baseline_seed0_coilset.h5")
 # Stage one: the weights of desc/examples/precise_QA.py (QS 1, aspect ratio 10,
 # iota 10), all multiplied by STAGE1_SCALE. Coil terms: the stage-two tutorial's.
-# With STAGE1_SCALE = 1000 the QS term (8.9 at the start) and the boundary error
-# (10.7 at the start, weight 1) are of similar size, so the solve has to trade
-# plasma quality against how well the coils fit it.
+# Boundary error: at the start it is dominated by a |B|^2 mismatch between the
+# plasma and the tutorial's coils, which a solve removes cheaply. With weight 1 the
+# solve then let <|B.n|>/<|B|> grow from 3.7e-4 to 3.9e-3 (boundary-error cost
+# 0.0017) to gain QS. Weight 300 makes <|B.n|>/<|B|> ~ 1e-3 cost about as much as
+# the remaining QS error, so the solve has to trade plasma quality against how well
+# the coils fit it.
 STAGE1_SCALE = 1000.0
 WEIGHTS = {
     "qs": 1.0 * STAGE1_SCALE,
     "aspect ratio": 10.0 * STAGE1_SCALE,
     "iota": 10.0 * STAGE1_SCALE,
-    "boundary error": 1.0,
+    "boundary error": 300.0,
     "coil-coil min dist": 100.0,
     "plasma-coil min dist": 10.0,
     "coil curvature": 185.0,

@@ -410,11 +410,12 @@ coilset.save("best_coils.h5")                           # coilset now holds the 
 |---|---|
 | `desc_global.py` | Library: `ProjectedProblem` wrapper plus `multistart`, `basin_hopping`, `cma_es`, `annealed_noisy_gradient` |
 | `stage2_precise_QA.py` | Stage-two driver (tutorial problem), one method per call |
-| `run_stage2_all.sh` | Runs stage-two methods in sequence with the same budget and cores (`BUDGET`, `SEED`, `METHODS`, `EXTRA="--variant matched"`) |
+| `run_stage2_all.sh` | Runs stage-two methods in sequence with the same budget and cores (`METHODS`, `BUDGET`, `SEED`, `CORES`, `EXTRA="--variant matched"`, `LOGTAG`, `VENV`; see the header) |
 | `stage1_precise_QA.py` | Stage-one driver (precise QA example): baseline / multistart / basin hopping |
 | `run_stage1_all.sh` | Same for stage one |
 | `nae_global.py` | NAE-constrained equilibria (deflation tutorial problem): tutorial deflation, sum-form deflation, multistart, deflated multistart, QS-guided pool |
 | `analyze.py` | Builds `results/summary.md` and `figures/` |
+| `diag_noisy.py` | Diagnostic for the noisy gradient: independent excursions from one stored minimum, with their end and polished costs and how far they travelled |
 | `results/stage2_fixed/*.json`, `*_coilset.h5` | Stage two with the coil frame fixed (the results above): per-run summaries (cost trace, every local minimum found, metrics) and the best coilsets; `*_matched_*` = matched-bounds variant |
 | `results/stage2/*.json`, `*_coilset.h5` | The same for the earlier free-frame runs (rounds one and two); `*_tight_*` = tight-bounds variant |
 | `results/stage1/*.json`, `*_eq.h5` | Same for stage one, with the best equilibria |

@@ -83,6 +83,11 @@ RHO = np.array([0.25, 0.5, 0.75, 1.0])
 
 
 def setup():
+    """The tutorial's near-axis solution and the global equilibrium fitted to it.
+
+    Returns the first-order precise-QA ``Qsc`` object and an ``Equilibrium`` built
+    from it at r = 0.25 (L = M = 5, N = 6), the initial guess of every method.
+    """
     qsc_eq = Qsc.from_paper("precise QA", order=1)
     eq_fit = Equilibrium.from_near_axis(qsc_eq, r=0.25, L=5, M=5, N=6, ntheta=12)
     return qsc_eq, eq_fit
@@ -97,6 +102,7 @@ def shape_scales(ell, alpha):
     """
 
     def f(e, name):
+        """Scales of ``e``'s R_lmn or Z_lmn: nonzero only for the shape modes."""
         modes = getattr(e, name[0] + "_basis").modes
         l, m, n = np.abs(modes).T
         s = ell * np.exp(-alpha * np.maximum(m, n))
@@ -106,6 +112,7 @@ def shape_scales(ell, alpha):
 
 
 def force_error(eq):
+    """Volume-averaged force error, normalized by the magnetic pressure gradient."""
     g = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     d = eq.compute(["<|F|>_vol", "<|grad(|B|^2)|/2mu0>_vol"], grid=g)
     return float(d["<|F|>_vol"] / d["<|grad(|B|^2)|/2mu0>_vol"])
@@ -140,12 +147,19 @@ class Recorder:
     """Collects solutions and checkpoints them to disk after each one."""
 
     def __init__(self, method, seed, args):
+        """Start the clock for run ``<method>_seed<seed>``; ``args`` are saved too."""
         self.t0 = time.time()
         self.tag = f"{method}_seed{seed}"
         self.sols, self.bdry = [], []
         self.args = args
 
     def add(self, eq_nae, eq_fb, label, extra=None):
+        """Record one solution: metrics of the fixed-boundary re-solve ``eq_fb``.
+
+        A solution is valid if both the NAE-constrained solve and the
+        fixed-boundary solve have force error below 1 % and finite QS error.
+        Returns the record (dict) after checkpointing everything to disk.
+        """
         rec = dict(time=time.time() - self.t0, label=label, force_nae=force_error(eq_nae))
         rec.update(metrics(eq_fb))
         rec["valid"] = bool(rec["force_nae"] < 1e-2 and rec["force"] < 1e-2
@@ -166,6 +180,7 @@ class Recorder:
         return rec
 
     def save(self):
+        """Write all records (JSON) and boundary coefficients (NPZ)."""
         os.makedirs(OUTDIR, exist_ok=True)
         with open(os.path.join(OUTDIR, self.tag + ".json"), "w") as f:
             json.dump(dict(args=vars(self.args), wall_time=time.time() - self.t0,
@@ -174,6 +189,7 @@ class Recorder:
 
 
 def fixed_boundary(eq):
+    """Copy of ``eq`` re-solved as a conventional fixed-boundary equilibrium."""
     eqf = eq.copy()
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -207,6 +223,12 @@ def run_deflation(args, qsc_eq, eq_fit, rec, reduction="prod"):
 
 
 def make_problem(args, qsc_eq, eq_fit, slots):
+    """A :class:`ProjectedProblem` for force balance under the NAE constraints.
+
+    Only the shape modes of :func:`shape_scales` are perturbed. With ``slots > 0``
+    it carries a nearest-center (``"max"``) deflation term with that many centers.
+    Returns the equilibrium being optimized and the problem.
+    """
     eq = eq_fit.copy()
     p = ProjectedProblem(
         eq, ObjectiveFunction(ForceBalance(eq)), get_NAE_constraints(eq, qsc_eq, order=1),
@@ -218,6 +240,7 @@ def make_problem(args, qsc_eq, eq_fit, slots):
 
 
 def run_multistart(args, qsc_eq, eq_fit, rec, deflate):
+    """Multistart from the initial guess (``deflate``: first 15 iterations deflated)."""
     rng = np.random.default_rng(args.seed)
     eq, p = make_problem(args, qsc_eq, eq_fit, 400 if deflate else 0)
     x0 = p.x_full()
@@ -237,6 +260,12 @@ def run_multistart(args, qsc_eq, eq_fit, rec, deflate):
 
 
 def run_qs_pool(args, qsc_eq, eq_fit, rec, pool_size=5):
+    """QS-guided deflated pool search.
+
+    Parents are the ``pool_size`` valid solutions with the lowest QS error, chosen
+    with weights ``exp(-rank)``. Each hop perturbs a parent, runs 15 iterations
+    deflated around every solution found so far, then the full NAE solve.
+    """
     rng = np.random.default_rng(args.seed)
     eq, p = make_problem(args, qsc_eq, eq_fit, 400)
     x0 = p.x_full()
@@ -265,6 +294,7 @@ def run_qs_pool(args, qsc_eq, eq_fit, rec, pool_size=5):
 
 
 def main():
+    """Run one method for ``--budget`` seconds, recording every solution."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--method", required=True,
                     choices=["deflation", "deflation_sum", "multistart", "defl_multistart",

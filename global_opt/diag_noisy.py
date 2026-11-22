@@ -11,8 +11,10 @@ with the given hyperparameters, polish each with ``lsq-exact``, and record:
 
 Usage::
 
-    python diag_noisy.py --start results/stage2_fixed/noisy_seed0_coilset.h5 \
+    python diag_noisy.py --start results/stage2_fixed/noisy_seed0_coilset.h5 \\
         --lr 0.02 --T0 0.3 --beta1 0.9 --steps 200 --n 8 [--free-frame]
+
+Results go to ``results/diag_noisy/<frame>_lr<lr>_T<T0>_b<beta1>_s<steps>.json``.
 """
 
 import argparse
@@ -67,12 +69,14 @@ def excursion(problem, x0, lr, T0, beta1, steps, rng, beta2=0.999):
 
 
 def rms(problem, dx):
+    """RMS of a displacement in perturbation-scale units (perturbed entries only)."""
     s = problem.scales
     msk = s > 0
     return float(np.sqrt(np.mean((dx[msk] / s[msk]) ** 2)))
 
 
 def main():
+    """Run the excursions for one setting and write the JSON summary."""
     p = argparse.ArgumentParser()
     p.add_argument("--start", required=True)
     p.add_argument("--free-frame", action="store_true")

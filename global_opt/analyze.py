@@ -65,6 +65,7 @@ VARIANT_NOTE = {"_tight": ", tight bounds", "_matched": ", matched bounds"}
 
 
 def _base(key):
+    """Method name without the variant suffix (``_tight``, ``_matched``)."""
     for sfx in VARIANT_NOTE:
         if key.endswith(sfx):
             return key[: -len(sfx)]
@@ -72,18 +73,22 @@ def _base(key):
 
 
 def _note(key):
+    """Table label suffix for a variant key."""
     return next((v for k, v in VARIANT_NOTE.items() if key.endswith(k)), "")
 
 
 def label(key):
+    """Plot label of a run key."""
     return LABELS[_base(key)].replace("\\|", "|")
 
 
 def color(key):
+    """Plot color of a run key (variants share their method's color)."""
     return COLORS[_base(key)]
 
 
 def _style(ax):
+    """Recessive axes: no top/right spines, light grid below the data."""
     for s in ("top", "right"):
         ax.spines[s].set_visible(False)
     for s in ("left", "bottom"):
@@ -94,6 +99,7 @@ def _style(ax):
 
 
 def load(stage):
+    """All run summaries in ``results/<stage>``, as {method + tag: [runs by seed]}."""
     runs = {}
     for f in sorted(glob.glob(os.path.join(RES, stage, "*.json"))):
         d = json.load(open(f))
@@ -109,6 +115,7 @@ def load(stage):
 
 
 def stage2_table(runs, keys=ORDER):
+    """Markdown table of the stage-two runs: cost, terms, field error, geometry."""
     rows = [
         "| Method | Seed | Best cost | Quadratic-flux term | <\\|B·n\\|>/<\\|B\\|> "
         "| Min coil-coil [m] | Min plasma-coil [m] | Max curvature (norm.) "
@@ -139,6 +146,11 @@ def plot_convergence(
     base_label="tutorial result",
     legend_loc="lower left",
 ):
+    """Best cost so far vs. wall time for every run of ``keys`` (log scale).
+
+    ``baseline_cost`` is drawn as a dashed reference line labelled ``base_label``.
+    Seeds 1 and 2 are drawn in lighter shades; ``pool_nodefl`` is dashed.
+    """
     fig, ax = plt.subplots(figsize=(7.2, 4.2), dpi=150)
     _style(ax)
     ax.axhline(baseline_cost, color=BASELINE_COLOR, lw=1.5, ls=(0, (4, 3)))
@@ -333,6 +345,7 @@ def stage2_fields(runs, variant="tutorial", stage="stage2"):
 
 
 def stage1_table(runs):
+    """Markdown table of the stage-one runs."""
     rows = [
         "| Method | Seed | Best cost | QS term | Aspect term | iota term "
         "| Aspect ratio | iota (edge) | Local optimizations | Wall [s] |",
@@ -371,6 +384,7 @@ DELTAS = (0.01, 0.02, 0.04)
 
 
 def load_nae():
+    """All NAE run summaries with their boundary coefficients, by method."""
     runs = {}
     for f in sorted(glob.glob(os.path.join(RES, "nae", "*.json"))):
         d = json.load(open(f))
@@ -393,6 +407,7 @@ def distinct_curve(run, delta):
 
 
 def nae_table(runs):
+    """Markdown table of the NAE runs: valid/distinct counts, QS error, iota range."""
     rows = [
         "| Method | Seed | Solutions | Valid | Distinct (δ = 0.01 / 0.02 / 0.04 m) "
         "| s per solution | Best QS error | Median QS error | ι edge range | Best f_B(ρ=1) |",
@@ -414,6 +429,7 @@ def nae_table(runs):
 
 
 def plot_nae(runs):
+    """NAE figures: distinct solutions and best QS over time; QS vs. edge iota."""
     fig, axs = plt.subplots(1, 2, figsize=(11, 4.0), dpi=150)
     for ax in axs:
         _style(ax)
@@ -464,6 +480,7 @@ def plot_nae(runs):
 
 
 def pool_stats_table(runs, keys):
+    """Markdown table of pool-search bookkeeping: hops, abandoned, inserted."""
     rows = ["| Method | Seed | Hops | Abandoned early | Polished | Entered pool | Duplicates | Best |",
             "|---|---|---|---|---|---|---|---|"]
     for k in keys:
@@ -488,6 +505,7 @@ FRAME_KEYS = ["multistart", "basin", "noisy", "pool_nodefl", "pool"]
 
 
 def frame_table(free, fixed):
+    """Markdown table of each method's per-seed costs with the coil frame free/fixed."""
     rows = [
         "| Method | Coil frame | Seed 0 | Seed 1 | Seed 2 | Worst seed |",
         "|---|---|---|---|---|---|",
@@ -507,6 +525,7 @@ def frame_table(free, fixed):
 
 
 def main():
+    """Write ``results/summary.md`` and every figure in ``figures/``."""
     p = argparse.ArgumentParser()
     p.add_argument("--fields", action="store_true")
     args = p.parse_args()

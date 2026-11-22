@@ -6,15 +6,37 @@ modular coils (N=10) for the vacuum precise QA equilibrium, started from circula
 coils, with quadratic flux, coil-coil and plasma-coil distance, curvature and length
 terms, and one coil current fixed.
 
+Methods (``--method``):
+
+baseline
+    The tutorial: one ``lsq-exact`` solve from circular coils (maxiter 100,
+    ftol 1e-4).
+converged
+    The same solve to tight tolerances (1e-10), to check that the baseline is a
+    genuine local minimum.
+multistart, basin, cma, noisy
+    :func:`desc_global.multistart`, :func:`desc_global.basin_hopping`,
+    :func:`desc_global.cma_es` and :func:`desc_global.annealed_noisy_gradient`.
+pool, pool_nodefl
+    :func:`desc_global.pool_search` with and without deflation.
+
+Options: ``--variant matched`` bounds coil-coil distance and coil length at the
+tutorial result's own values (``tight`` is the older variant based on the
+free-frame result); ``--free-frame`` leaves each coil's rotation and shift free, as
+in the first two rounds; ``--temperature`` and ``--target-ratio`` set the noisy
+gradient's temperature.
+
 Usage::
 
     python stage2_precise_QA.py --method baseline
-    python stage2_precise_QA.py --method multistart --budget 1200
-    python stage2_precise_QA.py --method basin --budget 1200
-    python stage2_precise_QA.py --method cma --budget 1200
-    python stage2_precise_QA.py --method noisy --budget 1200
+    python stage2_precise_QA.py --method pool --budget 1200 --seed 0
+    python stage2_precise_QA.py --method basin --budget 1200 --variant matched
 
-Results (JSON summary + best coilset .h5) are written to ``results/stage2/``.
+Results (JSON summary + best coilset .h5) are written to ``results/stage2_fixed/``
+(``results/stage2/`` with ``--free-frame``). The JSON holds the run settings, the
+best cost and its metrics (per-term costs, <|B.n|>/<|B|>, distances, curvature,
+coil lengths), the best-so-far trace, the cost of every local minimum reached and,
+for pool search and the noisy gradient, one record per hop or cycle.
 """
 
 import argparse
@@ -171,6 +193,7 @@ def metrics(problem, eq, coilset, x):
 
 
 def main():
+    """Run one method with the given budget and write its JSON summary and coilset."""
     p = argparse.ArgumentParser()
     p.add_argument(
         "--method",

@@ -84,6 +84,7 @@ def initial_eq(M):
 
 
 def make_objective(eq):
+    """The example's objective: two-term QS on rho = 0.6, 0.8, 1, aspect ratio 6, iota 0.42."""
     grid = LinearGrid(
         M=eq.M, N=eq.N, NFP=eq.NFP, rho=np.array([0.6, 0.8, 1.0]), sym=True
     )
@@ -97,6 +98,11 @@ def make_objective(eq):
 
 
 def make_constraints(eq, k):
+    """The example's constraints at continuation step ``k``.
+
+    Force balance, fixed profiles and Psi, the major radius R00, and every boundary
+    mode of order > k fixed, so only modes up to order k are optimized.
+    """
     R_modes = np.vstack(
         (
             [0, 0, 0],
@@ -147,6 +153,7 @@ def local_step(eq, k, maxiter):
 
 
 def continuation(eq, k_max, maxiter, log=None):
+    """The example's procedure: :func:`local_step` for k = 1, ..., k_max in turn."""
     for k in range(1, k_max + 1):
         eq = local_step(eq, k, maxiter)
         if log is not None:
@@ -167,6 +174,11 @@ def boundary_scales(eq, length_scale, alpha, max_order):
 
 
 def perturbed(eq, scales, sigma, rng):
+    """Copy of ``eq`` with its boundary perturbed by ``sigma * scales * N(0, 1)``.
+
+    Uses ``Equilibrium.perturb`` (first order), so the interior follows the boundary
+    and the following optimization starts close to force balance.
+    """
     deltas = {k: sigma * s * rng.standard_normal(s.size) for k, s in scales.items()}
     eq = eq.copy()
     with warnings.catch_warnings():
@@ -176,6 +188,7 @@ def perturbed(eq, scales, sigma, rng):
 
 
 def main():
+    """Run one strategy and write ``results/stage1/<method><tag>_M<M>_k<kmax>_seed<seed>``."""
     p = argparse.ArgumentParser()
     p.add_argument("--method", default="baseline", choices=["baseline", "multistart", "basin"])
     p.add_argument("--M", type=int, default=6)
@@ -198,6 +211,7 @@ def main():
     t0 = time.time()
 
     def log(msg):
+        """Print with the elapsed wall time."""
         print(f"[{time.time() - t0:7.0f}s] {msg}", flush=True)
 
     eq0 = initial_eq(args.M)
@@ -232,6 +246,7 @@ def main():
         return summary["best"]
 
     def record(eq, label):
+        """Log one local optimization's result and checkpoint if it is a new best."""
         nonlocal best_eq, best
         c = evaluate(eq)["cost"]
         minima.append(c)

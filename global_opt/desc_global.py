@@ -5,29 +5,55 @@ trust-region methods: they converge to a local minimum near the initial guess.
 Stage-two coil optimization in particular is strongly multimodal (coil-coil and
 plasma-coil distance penalties, curvature bounds, discrete symmetries), so the
 minimum found depends on the starting point. This module adds global search
-strategies on top of DESC's local solvers:
+strategies on top of DESC's local solvers.
+
+Every strategy minimizes the same least-squares cost as the local solver,
+
+    C(x) = 1/2 * || f(x) ||^2,
+
+where ``f`` are the weighted, normalized residuals of the ``ObjectiveFunction`` and
+``x`` is the full state vector of the optimizable objects, restricted to the affine
+set allowed by the linear constraints. Strategies:
 
 * :func:`multistart` - random perturbations of an initial guess, each followed by a
   local solve.
 * :func:`basin_hopping` - perturb the incumbent local minimum, re-solve locally,
   accept/reject with a Metropolis rule on ``log(cost)``, and adapt the step size.
+* :func:`pool_search` - deflated elite-pool basin hopping: keep the few best
+  distinct minima, kick one slightly, push the first iterations of the local solve
+  out of known basins with a deflation penalty (:class:`ScaledDeflation`), abandon
+  hops that are clearly worse after those iterations, polish the rest.
 * :func:`cma_es` - covariance matrix adaptation evolution strategy on the raw
   objective (population evaluated in a single vmapped call), followed by local
   polishing of the best candidates.
-* :func:`annealed_noisy_gradient` - Adam with annealed injected noise (a stochastic
-  gradient Langevin-type method) that can climb out of shallow basins, followed by
-  local polishing of the best iterates.
+* :func:`annealed_noisy_gradient` - excursions of Adam with annealed injected noise
+  (a stochastic-gradient Langevin-type method) from the incumbent minimum, each
+  polished by the local solver.
 
-All of them work through :class:`ProjectedProblem`, which builds the objective and
-the linear-constraint projection once, so that the JIT-compiled residual and
-Jacobian are reused by every local solve. Without that, each restart would pay the
-objective build + compile cost again.
+Building blocks:
+
+* :func:`perturbation_scales` - a scale for every entry of the state vector, so that
+  a random step ``sigma * scales * N(0, 1)`` is a smooth geometric deformation
+  (Fourier mode of order ``k`` gets ``length_scale * exp(-alpha * k)``). All step
+  sizes and distances in this module are in units of these scales.
+* :class:`ProjectedProblem` - builds the objective and the linear-constraint
+  projection once, so that the JIT-compiled residual and Jacobian are reused by
+  every local solve (without it, each restart would pay the objective build and
+  compile cost again). It also projects random steps onto the constraints and
+  carries the optional deflation penalty.
+* :class:`ScaledDeflation` - a sum-reduction deflation penalty (Panici et al. 2026)
+  whose centers, radius and weight can change between solves without recompiling.
+
+Every strategy returns a :class:`GlobalResult` (best ``x`` and ``cost``, every local
+minimum visited in ``history``, and the best-so-far ``trace`` against wall time) and
+leaves the optimizable objects in the best state found.
 
 Only problems whose constraints are all linear (``FixCoilCurrent``,
 ``FixParameters``, ``FixSumCoilCurrent``, ...) are handled by
 :class:`ProjectedProblem`. That covers the usual stage-two problem. For stage one
 (``proximal-lsq-exact``, where the equilibrium is re-solved at every step) see
-``stage1_global.py``, which uses the same perturbation machinery.
+``stage1_precise_QA.py``, which uses the same perturbation machinery around
+``Equilibrium.optimize``.
 """
 
 import time
@@ -101,6 +127,7 @@ def _leaf_scales(thing, length_scale, alpha, current_scale, angle_scale, overrid
 
 
 def _tree_scales(thing, *args):
+    """Scales and orders for a (possibly nested) collection, mirroring its pytree."""
     if isinstance(thing, OptimizableCollection):
         out = [_tree_scales(t, *args) for t in thing]
         return [o[0] for o in out], [o[1] for o in out]
@@ -108,6 +135,7 @@ def _tree_scales(thing, *args):
 
 
 def _mean_abs_current(thing):
+    """Mean |current| over all coils of ``thing`` (0 if it has no currents)."""
     if isinstance(thing, OptimizableCollection):
         cur = [_mean_abs_current(t) for t in thing]
         cur = [c for c in cur if c > 0]
@@ -175,6 +203,27 @@ class ScaledDeflation(_Objective):
     array attributes, i.e. as dynamic pytree leaves of the objective: changing them
     between local solves does not trigger recompilation. With all ``a_i = 0`` (or
     ``w = 0``) the term is exactly zero and the problem is the undeflated one.
+    Set them with :meth:`ProjectedProblem.set_deflation`.
+
+    Parameters
+    ----------
+    thing : Optimizable
+        The single optimizable object (e.g. a CoilSet) whose packed parameter
+        vector ``x`` is deflated.
+    scales : ndarray
+        Perturbation scale of every entry of ``x`` (:func:`perturbation_scales`).
+        Entries with zero scale are ignored in the distance; the RMS is over the
+        ``n_eff`` entries with nonzero scale.
+    n_slots : int
+        Maximum number of centers.
+    power : float
+        Exponent ``p`` of the deflation operator.
+    reduction : {"sum", "max"}
+        ``"sum"``: ``M = sum_i d_i^-p`` (paper's eq. 4.4). ``"max"``: only the
+        nearest center counts, so the excluded region is the union of the balls
+        however many centers there are.
+    name : str
+        Name of the objective term.
     """
 
     _scalar = True
@@ -204,10 +253,12 @@ class ScaledDeflation(_Objective):
         )
 
     def build(self, use_jit=True, verbose=1):
+        """Build the term: a single scalar residual."""
         self._dim_f = 1
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
+        """Hinge residual ``w * max(0, M(x) - r^-p)``, shape (1,)."""
         x = self.things[0].pack_params(params)
         diff = (x[None, :] - self._centers) * self._inv_scale[None, :]
         d2 = jnp.sum(diff**2, axis=1) / self._n_eff + 1e-12
@@ -249,6 +300,28 @@ class ProjectedProblem:
         redundant with the Fourier coefficients. The default (False) does the same.
         True leaves them free, which reproduces the first two rounds of stage-two
         runs (``results/stage2``); equilibria always get their constraints.
+    verbose : int
+        Print build information and per-hop progress if > 0.
+    deflation_reduction : {"sum", "max"}
+        Reduction of the deflation term, see :class:`ScaledDeflation`.
+
+    Attributes
+    ----------
+    scales, orders : ndarray
+        Perturbation scale and mode order of every entry of the full state vector.
+    proj : LinearConstraintProjection
+        The built projection. Its reduced variables ``z`` parametrize the affine
+        set allowed by the constraints: ``x = recover(z)``.
+    nfev, ngev, nlocal : int
+        Counters of objective evaluations, gradient/Jacobian evaluations and local
+        solves.
+
+    Notes
+    -----
+    Two vectors are used throughout: the full state ``x`` (``objective.x(*things)``,
+    what the strategies perturb and store) and the reduced ``z`` (what the local
+    solver and gradients work in). :meth:`feasible` maps any ``x`` to the nearest
+    point satisfying the constraints.
     """
 
     def __init__(
@@ -348,9 +421,11 @@ class ProjectedProblem:
             t.params_dict = p
 
     def project(self, x):
+        """Reduced variables ``z`` of a full vector ``x``."""
         return self.proj.project(jnp.asarray(x))
 
     def recover(self, z):
+        """Full vector ``x`` of reduced variables ``z`` (satisfies the constraints)."""
         return np.asarray(self.proj.recover(jnp.asarray(z)))
 
     def feasible(self, x):
@@ -372,6 +447,7 @@ class ProjectedProblem:
         return np.where(np.isfinite(c), c, np.inf)
 
     def value_and_grad_z(self, z):
+        """Cost ``0.5 * ||f||^2`` and its gradient with respect to ``z``."""
         self.nfev += 1
         self.ngev += 1
         c, g = self._val_and_grad(jnp.asarray(z))
@@ -411,6 +487,7 @@ class ProjectedProblem:
         d._weight = jnp.asarray(float(weight))
 
     def clear_deflation(self):
+        """Switch the deflation term off (exactly zero contribution)."""
         if self.deflation is not None:
             self.deflation._active = jnp.zeros(self.deflation._n_slots)
             self.deflation._weight = jnp.asarray(0.0)
@@ -451,16 +528,24 @@ class ProjectedProblem:
         )
 
     def elapsed(self):
+        """Seconds since the problem was built."""
         return time.time() - self.t_start
 
 
 class GlobalResult(dict):
-    """Result of a global search: ``x``, ``cost``, ``history`` and ``trace``."""
+    """Result of a global search, a dict whose keys can also be read as attributes.
+
+    Keys: ``x`` (best full state vector), ``cost`` (its cost), ``history`` (list of
+    dicts, one per local solve or hop; the keys depend on the strategy), ``trace``
+    (list of dicts with ``time``, ``nlocal``, ``nfev``, ``ngev`` and ``best_cost``,
+    one per step), ``method`` and ``wall_time``.
+    """
 
     __getattr__ = dict.__getitem__
 
 
 def _record(problem, trace, best_cost, label=""):
+    """Append the current best cost and the solver counters to ``trace``."""
     trace.append(
         dict(
             time=problem.elapsed(),
@@ -474,6 +559,7 @@ def _record(problem, trace, best_cost, label=""):
 
 
 def _finish(problem, best_x, best_cost, history, trace, method, t0):
+    """Write the best state into the things and package the :class:`GlobalResult`."""
     problem.set_x_full(best_x)
     return GlobalResult(
         x=best_x,
@@ -512,10 +598,25 @@ def multistart(
         Perturbation size in units of ``problem.scales``.
     x0 : ndarray, optional
         Initial guess (full vector). Defaults to the current state of the things.
+    seed : int
+        Seed of the random number generator.
+    include_x0 : bool
+        Whether the first local solve starts from ``x0`` itself.
     max_order : int, optional
         Only perturb modes with order <= max_order.
     time_budget : float
         Stop starting new local solves after this many seconds.
+    **local_kwargs
+        Overrides of ``problem.local_kwargs`` for every local solve.
+
+    Returns
+    -------
+    result : GlobalResult
+        ``x`` and ``cost`` of the best local minimum found, ``history`` (one dict per
+        local solve, see above), ``trace`` (best cost so far against wall time and
+        solver counters), ``method`` and ``wall_time``. The things are left in the
+        best state found.
+        ``history`` entries: ``start``, ``cost``, ``x``.
     """
     t0 = time.time()
     rng = np.random.default_rng(seed)
@@ -565,6 +666,49 @@ def basin_hopping(
     ``adapt_interval`` hops the step size is increased if the acceptance rate is above
     ``target_accept`` and decreased otherwise. If ``restart_after`` consecutive hops
     fail to improve the best, the walker restarts from the best point.
+
+    Parameters
+    ----------
+    problem : ProjectedProblem
+    n_hops : int
+        Maximum number of hops after the first local solve.
+    sigma : float
+        Initial step size, in units of ``problem.scales``.
+    x0 : ndarray, optional
+        Starting point (full vector); it is solved locally first. Defaults to the
+        current state of the things.
+    seed : int
+        Seed of the random number generator.
+    temperature : float
+        Metropolis temperature on ``log(cost)``. 0 accepts only improvements. With
+        0.5, a minimum twice as costly as the current one is accepted with
+        probability ``2**-2 = 0.25``.
+    adapt_interval : int
+        Adapt ``sigma`` every this many hops (0 disables adaptation).
+    target_accept : float
+        Target acceptance rate for the step-size adaptation.
+    adapt_factor : float
+        ``sigma`` is divided by this factor if the acceptance rate over the last
+        ``adapt_interval`` hops exceeded ``target_accept``, multiplied otherwise.
+    sigma_bounds : (float, float)
+        Bounds on ``sigma``.
+    max_order : int, optional
+        Only perturb modes with order <= max_order.
+    restart_after : int, optional
+        Return to the best minimum after this many hops without a new best.
+    time_budget : float
+        Stop starting new hops after this many seconds.
+    **local_kwargs
+        Overrides of ``problem.local_kwargs`` for every local solve.
+
+    Returns
+    -------
+    result : GlobalResult
+        ``x`` and ``cost`` of the best local minimum found, ``history`` (one dict per
+        local solve, see above), ``trace`` (best cost so far against wall time and
+        solver counters), ``method`` and ``wall_time``. The things are left in the
+        best state found.
+        ``history`` entries: ``hop``, ``cost``, ``accepted``, ``sigma``, ``x``.
     """
     t0 = time.time()
     rng = np.random.default_rng(seed)
@@ -661,6 +805,76 @@ def pool_search(
 
     The kick size ``sigma`` adapts every ``adapt_interval`` hops toward a pool-entry
     rate of ``target_success``.
+
+    The deflation weight is set so that the penalty term alone adds the parent's
+    cost ``c_par`` at an RMS distance ``r / sqrt(2)`` from a single center, where
+    ``r = defl_radius_rel * sigma``: with ``p = 2`` the residual
+    ``w * (d**-2 - r**-2)`` equals ``sqrt(2 * c_par)`` there when
+    ``w = defl_strength * sqrt(2 * c_par) * r**2``. The penalty is therefore
+    comparable to the objective itself, whatever the objective's scale.
+
+    Parameters
+    ----------
+    problem : ProjectedProblem
+        Must be built with ``deflation_slots >= pool_size`` if ``deflate``; slots
+        beyond ``pool_size`` hold the most recently found minima.
+    x0 : ndarray, optional
+        Starting point (full vector); it is solved locally first and becomes the
+        first pool member. Defaults to the current state of the things.
+    seed : int
+        Seed of the random number generator.
+    n_hops : int
+        Maximum number of hops.
+    pool_size : int
+        Number of distinct minima kept.
+    sigma : float, optional
+        Initial kick size in units of ``problem.scales``. Default 0.3 with
+        deflation, 1.0 without (deflation does the escaping, so the kick can be
+        small).
+    sigma_bounds : (float, float)
+        Bounds on ``sigma``.
+    adapt_interval : int
+        Adapt ``sigma`` every this many hops (0 disables adaptation).
+    target_success : float
+        Target rate of hops that enter the pool (or improve the best member).
+    adapt_factor : float
+        ``sigma`` is divided by this factor if the success rate exceeded
+        ``target_success``, multiplied otherwise.
+    rank_temperature : float
+        Parent selection weights are ``exp(-rank / rank_temperature)``, rank 0 being
+        the best member. Large values select uniformly.
+    deflate : bool
+        Deflate the first phase of every hop. False gives the ablation (pool,
+        racing and polish only).
+    defl_radius_rel : float
+        Deflation radius in units of ``sigma``.
+    defl_strength : float
+        Multiplier of the deflation weight (see above).
+    phase1_iters : int
+        Iterations of the (deflated) first phase of each local solve.
+    race_factor : float
+        Abandon a hop whose undeflated cost after phase 1 exceeds this many times
+        the worst pool member's cost.
+    dup_radius : float
+        Minima closer than this (RMS, in units of ``problem.scales``) to a pool
+        member are treated as the same minimum.
+    time_budget : float
+        Stop starting new hops after this many seconds.
+    **local_kwargs
+        Overrides of ``problem.local_kwargs`` for every local solve.
+
+    Returns
+    -------
+    result : GlobalResult
+        ``x`` and ``cost`` of the best local minimum found, ``history`` (one dict per
+        local solve, see above), ``trace`` (best cost so far against wall time and
+        solver counters), ``method`` and ``wall_time``. The things are left in the
+        best state found.
+        ``history`` entries: ``hop``, ``kind`` (``start``, ``abandoned``,
+        ``inserted``, ``duplicate`` or ``worse``), ``cost``, ``phase1_cost``,
+        ``parent_rank``, ``sigma`` and, for polished hops, ``x``, ``dist_parent``
+        and ``nit``. ``result["stats"]`` counts abandoned, duplicate and inserted
+        hops, and ``result["pool_costs"]`` lists the final pool.
     """
     t0 = time.time()
     rng = np.random.default_rng(seed)
@@ -779,6 +993,41 @@ def cma_es(
     generations) are refined by the local solver.
 
     Requires the ``cma`` package (``pip install cma``).
+
+    Parameters
+    ----------
+    problem : ProjectedProblem
+    sigma0 : float
+        Initial CMA-ES step size, in units of ``problem.scales``.
+    x0 : ndarray, optional
+        Center of the initial search distribution (full vector). Defaults to the
+        current state of the things; a local minimum works best.
+    seed : int
+        Seed passed to CMA-ES.
+    popsize : int, optional
+        Population size (CMA-ES default ``4 + 3 log n`` if None).
+    max_evals : int
+        Maximum number of objective evaluations.
+    max_order : int, optional
+        Only search modes with order <= max_order.
+    n_polish : int
+        Number of candidates polished with the local solver.
+    time_budget : float
+        Wall-clock budget of the CMA-ES phase in seconds (polishing comes after).
+    cma_options : dict, optional
+        Extra options for ``cma.CMAEvolutionStrategy``.
+    **local_kwargs
+        Overrides of ``problem.local_kwargs`` for the polishing solves.
+
+    Returns
+    -------
+    result : GlobalResult
+        ``x`` and ``cost`` of the best local minimum found, ``history`` (one dict per
+        local solve, see above), ``trace`` (best cost so far against wall time and
+        solver counters), ``method`` and ``wall_time``. The things are left in the
+        best state found.
+        ``history`` entries: one ``stage="cma"`` summary, then one
+        ``stage="polish"`` entry per polished candidate.
     """
     import cma
 
@@ -791,6 +1040,7 @@ def cma_es(
     S = problem.scales[idx]
 
     def to_x(y):
+        """Full vector of CMA-ES search variables ``y`` (scaled offsets from x0)."""
         x = x0.copy()
         x[idx] += S * y
         return x
@@ -886,6 +1136,49 @@ def annealed_noisy_gradient(
     multiplied by ``adapt_factor`` if the excursion ended above ``target_ratio``
     times the incumbent's cost, and divided by it otherwise (within
     ``temperature_bounds``).
+
+    On the stage-two coil problem the default temperature (0.3) turned out to be
+    too high: excursions ended at 50-100 times the incumbent's cost (see
+    ``diag_noisy.py``). About 0.03 works better there.
+
+    Parameters
+    ----------
+    problem : ProjectedProblem
+    n_cycles : int
+        Maximum number of excursions.
+    steps_per_cycle : int
+        Adam steps per excursion.
+    lr : float
+        Adam learning rate, in units of ``problem.scales`` per step.
+    temperature0 : float
+        Initial temperature of each excursion (noise amplitude ``sqrt(2 lr T)``).
+    x0 : ndarray, optional
+        Starting point (full vector), ideally a local minimum. Defaults to the
+        current state of the things.
+    seed : int
+        Seed of the random number generator.
+    beta1, beta2 : float
+        Adam moment decay rates.
+    target_ratio : float, optional
+        Enables the temperature adaptation described above.
+    adapt_factor : float
+        Factor of the temperature adaptation.
+    temperature_bounds : (float, float)
+        Bounds of the adapted temperature.
+    time_budget : float
+        Stop starting new excursions after this many seconds.
+    **local_kwargs
+        Overrides of ``problem.local_kwargs`` for the polishing solves.
+
+    Returns
+    -------
+    result : GlobalResult
+        ``x`` and ``cost`` of the best local minimum found, ``history`` (one dict per
+        local solve, see above), ``trace`` (best cost so far against wall time and
+        solver counters), ``method`` and ``wall_time``. The things are left in the
+        best state found.
+        ``history`` entries: ``cycle``, ``raw`` (cost at the end of the excursion),
+        ``cost`` (after polishing), ``accepted``, ``T0`` and ``x``.
     """
     t0 = time.time()
     rng = np.random.default_rng(seed)

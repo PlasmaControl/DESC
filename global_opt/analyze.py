@@ -593,8 +593,7 @@ def ss_plots(runs):
     plt.close(fig)
     pr = {f"pool_s{d['seed']}": [d] for d in runs.get("pool", [])}
     if pr:
-        global COLORS, LABELS
-        for k in pr:
+        for k in pr:  # module-level dicts, so plot_minima finds these keys
             COLORS[k] = COLORS["pool"]
             LABELS[k] = f"Pool search, seed {k[-1]}"
         plot_minima(pr, os.path.join(FIG, "single_stage_minima.png"), base["best_cost"],

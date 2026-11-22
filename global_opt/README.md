@@ -1,4 +1,4 @@
-# Global / stochastic optimization for DESC stage-one and stage-two problems
+# Global / stochastic optimization for DESC stage-one, stage-two and single-stage problems
 
 DESC's optimizers (`lsq-exact`, `proximal-lsq-exact`, ...) are local trust-region
 methods: they converge to the local minimum nearest the initial guess. This folder
@@ -16,6 +16,10 @@ examples that ship with DESC:
 * **NAE-constrained equilibria:** the first problem of
   `docs/notebooks/tutorials/deflation.ipynb` (precise-QA near-axis constraints).
   It has many solutions and follows the deflation paper (Panici et al. 2026).
+* **Single stage:** the precise QA plasma and the stage-two tutorial's coils
+  optimized together at L = M = N = 6: the example's stage-one objective plus
+  `VacuumBoundaryError` and the tutorial's coil terms, with `ForceBalance` as a
+  constraint.
 
 A second round used what the first round showed, together with the deflation
 paper, to build a better method: **deflated pool search**. It was tested on the
@@ -451,14 +455,17 @@ result = pool_search(problem, x0=problem.x_full(), time_budget=3600)
 | `run_stage1_all.sh` | Same for stage one |
 | `nae_global.py` | NAE-constrained equilibria (deflation tutorial problem): tutorial deflation, sum-form deflation, multistart, deflated multistart, QS-guided pool |
 | `analyze.py` | Builds `results/summary.md` and `figures/` |
+| `single_stage_precise_QA.py` | Single-stage benchmark driver (vacuum precise QA and its coils, L = M = N = 6): one solve, the same to tight tolerances (optionally from a saved result, `--start`), deflated pool search |
 | `example_single_stage.py` | Small single-stage example (equilibrium and coils both vary, `ForceBalance` as a constraint): basin hopping and deflated pool search |
 | `diag_noisy.py` | Diagnostic for the noisy gradient: independent excursions from one stored minimum, with their end and polished costs and how far they travelled |
 | `results/stage2_fixed/*.json`, `*_coilset.h5` | Stage two with the coil frame fixed (the results above): per-run summaries (cost trace, every local minimum found, metrics) and the best coilsets; `*_matched_*` = matched-bounds variant |
 | `results/stage2/*.json`, `*_coilset.h5` | The same for the earlier free-frame runs (rounds one and two); `*_tight_*` = tight-bounds variant |
 | `results/stage1/*.json`, `*_eq.h5` | Same for stage one, with the best equilibria |
+| `results/single_stage/*.json`, `*_eq.h5`, `*_coilset.h5` | Single-stage benchmark: per-run summaries and the final equilibria and coils; `converged_from_pool_seedN_*` = pool search's best re-solved to tight tolerances; `checks/` = a repeat of the single solve (same cost to 1e-8); `superseded_w1/` = a first attempt with boundary-error weight 1, where the coupling term did not matter |
 | `results/nae/*.json`, `*.npz` | Every NAE-constrained equilibrium found: metrics (force error, ι, aspect ratio, Boozer f_B(ρ), magnetic well) and boundary coefficients |
 | `results/*/logs/` | Run logs (not committed) |
 | `results/stage2/superseded/` | First (failed) noisy-gradient design, kept for reference |
+| `figures/single_stage_*.png` | Single-stage figures |
 | `figures/stage2_fixed_*.png` | Stage-two figures above; `figures/stage2_*.png` without `_fixed` are the free-frame ones |
 
 ## How the global search works
@@ -532,6 +539,13 @@ python stage1_precise_QA.py --method multistart --budget 3600
 python stage1_precise_QA.py --method basin --budget 3600
 python stage1_precise_QA.py --method basin --budget 2400 --seed 1 --tag _explore \
     --init results/stage1/baseline_M6_k3_seed0_eq.h5
+# single stage (results/single_stage): 2 cores per run
+python single_stage_precise_QA.py --method baseline
+python single_stage_precise_QA.py --method converged
+for s in 0 1 2; do
+  python single_stage_precise_QA.py --method pool --seed $s --budget 7200
+  python single_stage_precise_QA.py --method converged --start pool_seed$s
+done
 # NAE-constrained equilibria: 30 min on one core each
 for m in deflation deflation_sum multistart defl_multistart qs_pool; do
   taskset -c 3 python nae_global.py --method $m --budget 1800 --seed 0

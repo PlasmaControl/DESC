@@ -113,9 +113,11 @@ What these show:
 * **The noisy gradient did not hold up.** With the frame free it was the most
   consistent first-round method (4.4, 5.7 and 9.0). With the frame fixed, its
   seeds ended at 8.8, 16.3 and 23.5, and only 32 % of its minima beat the
-  tutorial. I haven't isolated why. Its Adam excursions move through all the
-  projected variables, and with the frame free those included 36 redundant ones;
-  that is one candidate.
+  tutorial. `diag_noisy.py` shows why: its default noise is too strong in either
+  frame. Adam's normalized steps cannot push back on steep walls, so excursions
+  end at 50–100 times the incumbent's cost and act as random jumps. A lower
+  temperature (`--temperature 0.03`) helps a little (one seed: 7.5 against 8.8)
+  but does not close the gap to basin hopping or pool search.
 
 ### Same problem with bounds matched to the tutorial result
 

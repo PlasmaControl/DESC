@@ -602,6 +602,11 @@ def ss_plots(runs):
             ax.plot(t[-1], p["best_cost"], "o", ms=6, mfc="white", mec=COLORS["pool"],
                     mew=1.5, label="after tight-tolerance polish" if i == 0 else None)
     ax.set_yscale("log")
+    from matplotlib.ticker import FuncFormatter
+
+    for axis in (ax.yaxis,):  # plain numbers: the range is under a decade
+        axis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
+        axis.set_minor_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
     ax.set_xlabel("wall-clock time [min]", color="#52514e")
     ax.set_ylabel("best objective found", color="#52514e")
     ax.set_title("Single stage (precise QA + coils, L = M = N = 6): best cost vs. time",
@@ -652,8 +657,8 @@ def ss_fields(runs):
     cases = [(one[0], one[1], BASELINE_COLOR, one[2]),
              (pool_case[0], pool_case[1], COLORS["pool"], pool_case[2])]
     eq0 = desc.examples.get("precise_QA")
-    fig = plt.figure(figsize=(12.5, 4.0), dpi=150)
-    gs = fig.add_gridspec(1, 4, width_ratios=[1, 1, 0.06, 1.25], wspace=0.35)
+    fig = plt.figure(figsize=(13.5, 4.0), dpi=150)
+    gs = fig.add_gridspec(1, 5, width_ratios=[1, 1, 0.06, 0.32, 1.25], wspace=0.35)
     # B.n / |B| of the coils on each plasma boundary
     data = []
     for lab, tag, col, c in cases:
@@ -675,7 +680,7 @@ def ss_fields(runs):
         ax.set_title(f"{lab} (cost {c:.1f})", fontsize=10, loc="left")
     fig.colorbar(im, cax=fig.add_subplot(gs[0, 2]), label=r"$B\cdot n\,/\,|B|$ from coils")
     # plasma cross-sections at zeta = 0 and pi/2 (half a field period apart)
-    ax = fig.add_subplot(gs[0, 3])
+    ax = fig.add_subplot(gs[0, 4])
     _style(ax)
     for eq, lab, col, ls in [(eq0, "start (precise QA)", "#0b0b0b", ":")] + [
         (d[2], c[0], c[2], "-") for d, c in zip(data, cases)

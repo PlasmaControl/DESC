@@ -201,11 +201,13 @@ def plot_convergence(
 
 
 def plot_minima(
-    runs, fname, baseline_cost, xlabel, title, methods, labels=None, xmax=None, skip_first=False
+    runs, fname, baseline_cost, xlabel, title, methods, labels=None, xmax=None,
+    skip_first=False, plain_ticks=False, baseline_label=" single local solve",
 ):
     """Strip plot of every local minimum; values above xmax are drawn at the edge.
 
     ``skip_first`` drops each run's starting solve (the single-solve baseline).
+    ``plain_ticks`` labels the log axis 20, 30, ... instead of 2×10¹, 3×10¹, ...
     """
     fig, ax = plt.subplots(figsize=(7.6, max(2.4, 0.9 + 0.55 * len(methods))), dpi=150)
     _style(ax)
@@ -249,7 +251,7 @@ def plot_minima(
     ax.text(
         baseline_cost,
         len(methods) - 0.45,
-        " single local solve",
+        baseline_label,
         fontsize=8,
         color="#52514e",
         va="bottom",
@@ -261,6 +263,13 @@ def plot_minima(
     )
     ax.set_ylim(-0.6, len(methods) - 0.1)
     ax.set_xscale("log")
+    if plain_ticks:
+        from matplotlib.ticker import FixedLocator, FuncFormatter, NullFormatter
+
+        nice = [m * 10.0**e for e in range(-6, 7) for m in (1, 2, 3, 5)]
+        ax.xaxis.set_major_locator(FixedLocator(nice))
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
+        ax.xaxis.set_minor_formatter(NullFormatter())
     if xmax is not None:
         ax.set_xlim(right=xmax * 1.8)
         xlabel += f"   (open triangles: > {xmax:g}, equilibrium solve diverged)"
@@ -624,7 +633,8 @@ def ss_plots(runs):
         plot_minima(pr, os.path.join(FIG, "single_stage_minima.png"), base["best_cost"],
                     "objective value of each local minimum (log)",
                     "Single stage: local minima reached (abandoned hops not shown)",
-                    sorted(pr), skip_first=True)
+                    sorted(pr), skip_first=True, plain_ticks=True,
+                    baseline_label=" single solve (100 iterations)")
 
 
 def ss_fields(runs):

@@ -1,0 +1,63 @@
+{
+ "method": "converged",
+ "tag": "_from_pool_seed1",
+ "seed": 0,
+ "M": 6,
+ "kmax": 4,
+ "maxiter": 100,
+ "length_scale": 0.05,
+ "boundary_scale": 0.02,
+ "budget": 7200.0,
+ "start": "pool_seed1",
+ "weights": {
+  "qs": 1000.0,
+  "aspect ratio": 10000.0,
+  "iota": 10000.0,
+  "boundary error": 300.0,
+  "coil-coil min dist": 100.0,
+  "plasma-coil min dist": 10.0,
+  "coil curvature": 185.0,
+  "coil length": 20.0
+ },
+ "wall_time": 702.4656457901001,
+ "n_local_solves": 1,
+ "best_cost": 24.579132056243015,
+ "metrics": {
+  "cost": 24.579132056243015,
+  "terms": {
+   "qs": 22.282555542958935,
+   "aspect ratio": 1.8825782729780248e-06,
+   "iota": 1.7097030882494555,
+   "boundary error": 0.5866030619984026,
+   "coil-coil dist": 0.0002525898430992484,
+   "plasma-coil dist": 0.0,
+   "curvature": 1.5890614843405263e-05,
+   "length": 0.0
+  },
+  "aspect_ratio": 5.999999805959886,
+  "iota_edge": 0.41944967269513894,
+  "force_residual_rms": 9.82961848022776e-06,
+  "Bn_over_B": 0.00044051737391966284,
+  "coil_lengths": [
+   8.818880333838417,
+   8.596994806399092,
+   8.295814236061906
+  ]
+ },
+ "trace": [
+  {
+   "time": 644.1213293075562,
+   "nlocal": 1,
+   "best_cost": 24.579132056243015
+  }
+ ],
+ "local_minima": [
+  24.579132056243015
+ ],
+ "hops": [
+  {
+   "cost": 24.579132056243015
+  }
+ ],
+ "nit": 198
+}

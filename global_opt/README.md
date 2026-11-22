@@ -70,6 +70,11 @@ All runs were made on 4 CPU cores (no GPU) with DESC master at commit `d644e62`.
   (~30 % lower). Basin hopping started from the example's result reaches
   **1.16e-4 (43 % lower)**. The gain is almost entirely in the QS error; aspect
   ratio and ι stay on target.
+* **Single stage: 1.5–2× lower cost.** With the precise QA plasma and the
+  tutorial's coils optimized together (L = M = N = 6, `ForceBalance` as a
+  constraint), a single `proximal-lsq-exact` solve converges to 37.1. Deflated
+  pool search's three 2-hour seeds reach **18.6**, 24.6 and 22.4, with lower QS
+  error and lower ⟨|B·n|⟩/⟨|B|⟩ in every case, and longer coils.
 * **Use deflated pool search, not CMA-ES.** In the earlier free-frame runs, CMA-ES
   did worst of all the global methods (54.9, or 35.8 restricted to |n| ≤ 2
   modes, while the others reached 2.4–16). The methods built on DESC's
@@ -335,6 +340,78 @@ sometimes make the equilibrium solve diverge (the open triangles in the figure).
 Those trials are rejected automatically, but they waste time, so keep
 `--sigma`/`--length-scale` moderate.
 
+## Single stage: precise QA and its coils together
+
+`single_stage_precise_QA.py` optimizes the plasma and the coils as one problem.
+The plasma is DESC's precise QA example (vacuum, NFP = 2) at L = M = N = 6, with
+boundary modes up to order 4 free and the major radius fixed. The coils are the
+stage-two tutorial's three, started from its result (cost 31.0 there). The
+objective adds the two stages:
+
+* stage one, as in `desc/examples/precise_QA.py`: `QuasisymmetryTwoTerm` on
+  ρ = 0.6, 0.8 and 1, aspect ratio 6 and ι = 0.42, with the example's relative
+  weights (1, 10, 10), all multiplied by 1000;
+* the coupling term `VacuumBoundaryError(eq, coils, field_fixed=False)`, weight
+  300: the coils' normal field on the plasma boundary and the jump in |B|² across
+  it;
+* the tutorial's coil terms and bounds: coil–coil and plasma–coil distance,
+  curvature and length.
+
+`ForceBalance` is a constraint, so every local solve is a `proximal-lsq-exact`
+solve that re-solves the equilibrium at each step. Every run used 2 CPU cores,
+and each pool-search seed had 2 hours. Each seed's best result was then re-solved
+to the tolerances of the converged single solve (1e-8, up to 500 iterations), so
+the two are compared at convergence.
+
+The boundary-error weight matters. A first attempt with weight 1
+(`results/single_stage/superseded_w1/`) was stage one in disguise: the solve let
+⟨|B·n|⟩/⟨|B|⟩ grow from 3.7e-4 to 3.9e-3 to gain QS, and the coupling term ended
+at 0.0017 of a cost of 26.4. Weight 300 makes ⟨|B·n|⟩/⟨|B|⟩ ≈ 1e-3 cost about
+as much as the remaining QS error, so the solve has to trade plasma quality
+against how well the coils fit it.
+
+| Method | Seed | Cost | QS term | Boundary-error term | ⟨\|B·n\|⟩/⟨\|B\|⟩ | Coil lengths [m] | Local solves | Wall [min] |
+|---|---|---|---|---|---|---|---|---|
+| Single solve (100 iterations, ftol 1e-4) | – | 40.11 | 38.40 | 1.66 | 6.0e-4 | 7.5, 6.9, 7.0 | 1 | 9 |
+| Same solve, tolerances 1e-8 (141 iterations) | – | 37.11 | 35.48 | 1.59 | 5.9e-4 | 7.5, 6.9, 7.0 | 1 | 12 |
+| **Deflated pool search**, re-solved to 1e-8 | 0 | **18.56** | 17.26 | 0.53 | 4.9e-4 | 9.3, 8.7, 8.5 | 80 + 1 | 122 + 7 |
+| Deflated pool search, re-solved to 1e-8 | 1 | 24.58 | 22.28 | 0.59 | 4.4e-4 | 8.8, 8.6, 8.3 | 82 + 1 | 122 + 12 |
+| Deflated pool search, re-solved to 1e-8 | 2 | 22.37 | 21.44 | 0.54 | 3.3e-4 | 8.4, 7.7, 7.8 | 81 + 1 | 123 + 4 |
+
+Every result has aspect ratio 6.000, ι within 0.001 of 0.42 at every radius, and
+an rms force residual of about 1e-5. The per-term breakdown, before and after
+the re-solve, is in [`results/summary.md`](results/summary.md).
+
+![Single stage convergence](figures/single_stage_convergence.png)
+
+![Single stage local minima](figures/single_stage_minima.png)
+
+![Single stage plasma, B.n and coils](figures/single_stage_fields.png)
+
+What these show:
+
+* **Pool search lowers the single-stage cost 1.5–2×.** The single solve's
+  minimum is genuine: run to tolerances 1e-8 it moves only from 40.1 to 37.1.
+  Every pool seed ends well below it: 18.6, 24.6 and 22.4.
+* **Both halves of the problem improve.** Across the three seeds the QS term
+  falls from 35.5 to 17.3–22.3 and the boundary-error term from 1.59 to
+  0.53–0.59; ⟨|B·n|⟩/⟨|B|⟩ drops from 5.9e-4 to 3.3–4.9e-4. The ι term gives a
+  little back (0.04 → 0.4–1.7), but ι stays within 0.001 of 0.42.
+* **What it spends: coil length.** As in stage two, the better minima use longer
+  coils: 7.7–9.3 m against 6.9–7.5 m. The tutorial's length bound is about
+  20 m; tighten it if length matters.
+* **The plasma changes shape.** The single solve stays close to the precise QA
+  boundary. Pool search's best result moves it outward, most visibly at ζ = 0.
+* **The landscape is rugged here too.** Of the 79 local minima the three seeds
+  completed, only 39 % beat the converged single solve (median 40.2). Of each
+  seed's 50–56 hops, 21–31 were abandoned after their 20-iteration first phase.
+* **Two hours was not a lot.** Seed 0 reached 25.4 after 29 minutes. Seeds 1 and
+  2 stayed above 29 for 90 minutes and found their best results at about 100
+  minutes, so with half the budget they would have gained much less.
+* **The re-solve confirms the minima.** It changed seeds 0 and 2 by less than
+  0.01 and seed 1 by 0.8 % (24.77 → 24.58, 198 iterations), so pool search's
+  results were already close to converged.
+
 ## Caveats
 
 * **Coil frame.** The stage-two results above fix each coil's rotation and
@@ -355,6 +432,9 @@ Those trials are rejected automatically, but they waste time, so keep
   search is the most consistent"; finer rankings are within seed scatter.
 * **Curvature bound everywhere.** Every stage-two solution, including the
   tutorial's, has its maximum curvature at the bound (2.0, normalized).
+* **Single stage.** One weighting of the two stages, three seeds, L = M = N = 6
+  instead of the example's 8, and 2 cores per run. That pool search beats a
+  single solve is clear; how much it gains depends on the weights.
 * **Reduced stage-one resolution.** Stage one ran at M = N = 6 with boundary
   modes up to 3, instead of M = N = 8 and 4 continuation steps. The minima at
   full resolution may differ.
@@ -436,10 +516,10 @@ problem = ProjectedProblem(
 result = pool_search(problem, x0=problem.x_full(), time_budget=3600)
 ```
 
-  It has only been run as a smoke test, with 6 iterations per local solve. The
-  start polished to 1.1e-5. Basin hopping's two hops were both worse; pool
-  search's first hop found 2.5e-6, and the race abandoned the next two. These
-  numbers are not a benchmark.
+  It is a small usage example (6 iterations per local solve by default). For
+  a benchmark on the same kind of problem, see
+  [Single stage: precise QA and its coils together](#single-stage-precise-qa-and-its-coils-together)
+  and `single_stage_precise_QA.py`.
 * `stage1_precise_QA.py` predates this support and drives `eq.optimize`
   directly with `Equilibrium.perturb` kicks; it gives the same kind of search for
   stage one.

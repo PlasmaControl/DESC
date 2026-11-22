@@ -1,0 +1,5 @@
+ProjectedProblem built in 35.9s: dim x = 965, dim z = 271, dim f = 1868, perturbed entries = 361
+built in 52s
+[pool] hop   0: cost 2.6403e+01
+[pool] hop   1: sigma 0.300 parent #0 (2.640e+01) phase-1 3.165e+01 -> 3.1602e+01 inserted  d_parent 0.93  best 2.6403e+01
+[pool] hop   2: sigma 0.300 parent #1 phase-1 cost 1.756e+02 -> abandoned   best 2.6403e+01

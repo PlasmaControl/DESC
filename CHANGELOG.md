@@ -7,7 +7,7 @@ New Features
 
 Breaking Changes and Deprecations
 
-- When multiplying a profile by a scalar, it now returns a new profile of the same class type with updated parameters if possible. The old code would always convert other profile types to a ``ScaledProfile`` or update the scale parameter of the original profile instance.
+- When multiplying a profile by a scalar, it now returns a new profile of the same class type with updated parameters if possible. The old code would always convert other profile types to a ``ScaledProfile`` or update the scale parameter of the original profile instance. Negating a profile (``-profile``) now behaves the same as ``-1 * profile``, instead of always wrapping it in a ``ScaledProfile``.
 
 Bug Fixes
 

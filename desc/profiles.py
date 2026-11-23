@@ -243,10 +243,11 @@ class _Profile(IOAble, ABC):
                 or isinstance(self, HermiteSplineProfile)
                 or isinstance(self, FourierZernikeProfile)
             ):
-                copy.params *= x
+                copy.params = copy.params * x
                 return copy
             if isinstance(self, TwoPowerProfile):
-                copy.params *= np.array([x, 1, 1])  # params = [scale, 1st pow, 2nd pow]
+                # params = [scale, 1st pow, 2nd pow]
+                copy.params = copy.params * jnp.array([x, 1, 1])
                 return copy
             return ScaledProfile(x, self)
         elif isinstance(x, _Profile):
@@ -267,7 +268,7 @@ class _Profile(IOAble, ABC):
 
     def __neg__(self):
         """Invert the sign of this profile."""
-        return ScaledProfile(-1, self)
+        return self.__mul__(-1)
 
     def __sub__(self, x):
         """Subtract another profile from this one."""

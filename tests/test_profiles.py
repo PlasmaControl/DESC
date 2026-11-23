@@ -1,5 +1,6 @@
 """Tests for profile classes."""
 
+import jax
 import numpy as np
 import pytest
 from scipy.constants import elementary_charge
@@ -246,21 +247,21 @@ class TestProfiles:
         )
         sp = pp.to_spline()
         zp = -pp.to_fourierzernike()
+        assert isinstance(zp, FourierZernikeProfile)
 
         f = pp + sp - zp
         x = np.linspace(0, 1, 50)
         np.testing.assert_allclose(f(x), 3 * (pp(x)), atol=1e-3)
 
         params = f.params
-        assert params.size == len(sp.params) + len(pp.params) + len(zp.params) + 1
+        assert params.size == len(sp.params) + len(pp.params) + len(zp.params)
         params = f._parse_params(params)
         assert all(params[0] == pp.params)
         assert all(params[1] == sp.params)
-        # offset by 1 because of two - signs
-        assert all(params[2][1:] == zp.params)
-        assert params[2][0] == -1
+        # negating a FourierZernikeProfile negates its params
+        assert all(params[2] == -zp.params)
 
-        f.params = (pp.params, 2 * sp.params, zp.params)
+        f.params = (pp.params, 2 * sp.params, -zp.params)
         np.testing.assert_allclose(f(x), 4 * (pp(x)), atol=1e-3)
 
     @pytest.mark.unit
@@ -367,6 +368,62 @@ class TestProfiles:
         assert f.params[0] == 3
         assert all(f.params[1:] == p.params)
         np.testing.assert_allclose(f(x), 3 * (p(x)), atol=1e-3)
+
+    @pytest.mark.unit
+    def test_scaled_profiles_int_params_and_traced_scale(self):
+        """Test scaling a TwoPowerProfile with int params or a traced scale."""
+        x = np.linspace(0, 1, 50)
+
+        # float scale of a profile with integer params
+        p = TwoPowerProfile(params=[1, 2, 4])
+        f = p * 0.5
+        assert isinstance(f, TwoPowerProfile)
+        np.testing.assert_allclose(f.params, [0.5, 2, 4])
+        np.testing.assert_allclose(f(x), 0.5 * p(x))
+        np.testing.assert_array_equal(p.params, [1, 2, 4])  # original unchanged
+
+        # derivative with respect to the scale factor
+        grid = LinearGrid(L=5)
+        p = TwoPowerProfile(params=[1.0, 2.0, 1.0])
+        df = jax.grad(lambda c: (c * p).compute(grid).sum())(2.0)
+        np.testing.assert_allclose(df, p.compute(grid).sum())
+
+    @pytest.mark.unit
+    def test_negated_profiles(self):
+        """Test that -p is the same as -1 * p and does not modify p."""
+        x = np.linspace(0, 1, 50)
+        pp = PowerSeriesProfile(
+            modes=np.array([0, 1, 2, 4]), params=np.array([1, 0, -2, 1]), sym="auto"
+        )
+        sp = pp.to_spline(knots=5)
+        hp = HermiteSplineProfile(f=[0, 1, 0.5], df=[1, 0, -0.5])
+        profiles = [
+            # these keep their type with negated params
+            (pp, PowerSeriesProfile),
+            (TwoPowerProfile(params=[1.0, 2.0, 4.0]), TwoPowerProfile),
+            (sp, SplineProfile),
+            (hp, HermiteSplineProfile),
+            (pp.to_fourierzernike(L=6), FourierZernikeProfile),
+            # a ScaledProfile negates its scale, the others become a ScaledProfile
+            (ScaledProfile(2.0, pp), ScaledProfile),
+            (MTanhProfile(params=[0.1, 0.5, 1, 1, 0]), ScaledProfile),
+            (PowerProfile(2.0, pp), ScaledProfile),
+            (pp + sp, ScaledProfile),
+            (pp * sp, ScaledProfile),
+        ]
+        for p, cls in profiles:
+            params = np.array(p.params)
+            f = -p
+            g = -1 * p
+            assert isinstance(f, cls)
+            assert type(f) is type(g)
+            np.testing.assert_allclose(f.params, g.params)
+            np.testing.assert_allclose(f(x), -p(x))
+            np.testing.assert_array_equal(p.params, params)  # original unchanged
+
+        f = -ScaledProfile(2.0, pp)
+        assert f._scale == -2
+        assert isinstance(f._profile, PowerSeriesProfile)
 
     @pytest.mark.unit
     def test_powered_profiles(self):

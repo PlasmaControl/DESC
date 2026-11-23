@@ -239,10 +239,13 @@ def rescale(
     -------
     eq : Equilibrium or iterable of Equilibrium
         Equilibrium input rescaled to the desired size and magnetic field strength.
-        The current profile (but not iota) will become a ``ScaledProfile``, which may
-        change the number of optimizable parameters of the profile by adding `scale`
-        to the first index. If scale_pressure is True, then the pressure or kinetic
-        profiles will also be converted to ``ScaledProfile`` types.
+        The current profile (but not iota) is multiplied by a constant, as are the
+        pressure or kinetic profiles if scale_pressure is True.
+        ``PowerSeriesProfile``, ``SplineProfile``, ``HermiteSplineProfile``,
+        ``FourierZernikeProfile``, and ``TwoPowerProfile`` types keep their type with
+        rescaled parameters, and a ``ScaledProfile`` has its ``scale`` updated.
+        Other profile types become a ``ScaledProfile``, which changes the number of
+        optimizable parameters of the profile by adding ``scale`` to the first index.
 
     """
     # maybe it's iterable:

@@ -143,7 +143,10 @@ class Transform(IOAble):
             derivatives = np.atleast_2d(derivs)
         else:
             raise NotImplementedError(
-                "derivs should be array-like with 3 columns, or a non-negative int"
+                colored(
+                    "derivs should be array-like with 3 columns, or a non-negative int",
+                    "red",
+                )
             )
         # always include the 0,0,0 derivative
         if not (np.array([0, 0, 0]) == derivatives).all(axis=-1).any():
@@ -203,8 +206,11 @@ class Transform(IOAble):
 
         if not grid.fft_toroidal:
             warnings.warn(
-                "fft method requires compatible grid, got {}".format(grid)
-                + "falling back to direct2 method",
+                colored(
+                    "fft method requires compatible grid, got {}".format(grid)
+                    + "falling back to direct2 method",
+                    "yellow",
+                )
             )
             self.method = "direct2"
             return

@@ -25,6 +25,7 @@ from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.objectives import (
     BootstrapRedlConsistency,
+    BootstrapRedlCurrentConsistency,
     FixAtomicNumber,
     FixBoundaryR,
     FixBoundaryZ,
@@ -1658,4 +1659,193 @@ def test_bootstrap_optimization_comparison_qa():
     )
     np.testing.assert_allclose(
         grid.compress(data1["<J*B>"]), grid.compress(data2["<J*B>"]), rtol=2e-2
+    )
+
+
+def _kinetic_tokamak(L=6, M=6, current=None):
+    """Unsolved axisymmetric equilibrium with kinetic profiles and a current."""
+    surface = FourierRZToroidalSurface(
+        R_lmn=np.array([6.0, 2.0]),
+        modes_R=[[0, 0], [1, 0]],
+        Z_lmn=np.array([-2.0]),
+        modes_Z=[[-1, 0]],
+    )
+    if current is None:
+        # a tokamak needs some current for iota (and so the Redl formula) to be finite
+        c = np.zeros(L + 1)
+        c[2] = -1.2e7
+        current = PowerSeriesProfile(c, sym=False)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", "current profile is not an even")
+        eq = Equilibrium(
+            surface=surface,
+            electron_density=PowerSeriesProfile([4e20, -4e20], modes=[0, 10]),
+            electron_temperature=PowerSeriesProfile([12e3, -12e3], modes=[0, 2]),
+            ion_temperature=PowerSeriesProfile([12e3, -12e3], modes=[0, 2]),
+            current=current,
+            Psi=5.0 * np.pi * 2.0**2,
+            L=L,
+            M=M,
+            N=0,
+            sym=True,
+        )
+    return eq
+
+
+@pytest.mark.unit
+def test_BootstrapRedlCurrentConsistency_build():
+    """Test default indices and errors of BootstrapRedlCurrentConsistency."""
+    rho = np.linspace(0.1, 0.9, 5)
+    grid = LinearGrid(M=6, N=0, rho=rho)
+
+    # full power series: c_0 = c_1 = 0 are fixed, the rest are determined
+    eq = _kinetic_tokamak(L=6)
+    obj = BootstrapRedlCurrentConsistency(eq, grid=grid)
+    obj.build(verbose=0)
+    assert obj.dim_f == 5
+    # even power series: only c_0 is fixed
+    eq.current = PowerSeriesProfile(np.zeros(4), modes=[0, 2, 4, 6])
+    obj = BootstrapRedlCurrentConsistency(eq, grid=grid)
+    obj.build(verbose=0)
+    assert obj.dim_f == 3
+    # spline: the knot at the axis is fixed
+    eq.current = SplineProfile(np.zeros(4), knots=np.array([0, 0.3, 0.6, 0.9]))
+    obj = BootstrapRedlCurrentConsistency(eq, grid=grid)
+    obj.build(verbose=0)
+    assert obj.dim_f == 3
+    obj = BootstrapRedlCurrentConsistency(eq, grid=grid, indices=[2, 3])
+    obj.build(verbose=0)
+    assert obj.dim_f == 2
+
+    # more unknowns than radial grid points
+    eq = _kinetic_tokamak(L=8)
+    with pytest.raises(ValueError, match="radial grid points"):
+        BootstrapRedlCurrentConsistency(eq, grid=grid).build(verbose=0)
+    # needs a current profile
+    with pytest.warns(UserWarning, match="removing existing toroidal current"):
+        eq.iota = PowerSeriesProfile([1.0])
+    with pytest.raises(ValueError, match="current profile"):
+        BootstrapRedlCurrentConsistency(eq, grid=grid).build(verbose=0)
+
+
+@pytest.mark.unit
+def test_BootstrapRedlCurrentConsistency_residual():
+    """Test the residuals are the projections of the profile differences."""
+    L = 6
+    eq = _kinetic_tokamak(
+        L=L,
+        current=PowerSeriesProfile([0, 0, -2e6, 1e6, 0, 3e5, 0], sym=False),
+    )
+    rho = np.linspace(0.1, 0.95, 12)
+    grid = LinearGrid(M=6, N=0, rho=rho)
+    names = ["current", "current Redl", "<J*B>", "<J*B> Redl"]
+    data = {k: grid.compress(v) for k, v in eq.compute(names, grid=grid).items()}
+    w = np.sqrt(grid.compress(grid.spacing[:, 0]))
+    # basis functions of c_2, ..., c_L and the test functions <B²> I' / (2Ψρ)
+    modes = np.arange(2, L + 1)
+    basis = rho[:, None] ** modes
+    B0 = compute_scaling_factors(eq)["B"]
+    test = B0**2 * modes * rho[:, None] ** (modes - 2) / (2 * eq.Psi)
+
+    # <J*B>: Galerkin projection of the <J*B> difference onto the test functions,
+    # which is orthonormal so its norm is the norm of the weighted projection
+    obj = BootstrapRedlCurrentConsistency(eq, grid=grid, normalize=False)
+    obj.build(verbose=0)
+    f = obj.compute_unscaled(eq.params_dict)
+    assert f.shape == (L - 1,)
+    err = w * (data["<J*B>"] - data["<J*B> Redl"])
+    A = w[:, None] * test
+    proj = A @ np.linalg.lstsq(A, err, rcond=None)[0]
+    np.testing.assert_allclose(np.linalg.norm(f), np.linalg.norm(proj), rtol=1e-6)
+    assert np.linalg.norm(f) > 1e-3 * np.linalg.norm(err)
+
+    # current: difference of the coefficients from the least squares fit of the
+    # Redl current, scaled by the change in <J*B> they make
+    obj = BootstrapRedlCurrentConsistency(
+        eq, grid=grid, normalize=False, quantity="current"
+    )
+    obj.build(verbose=0)
+    f = obj.compute_unscaled(eq.params_dict)
+    assert f.shape == (L - 1,)
+    c_fit = np.linalg.lstsq(w[:, None] * basis, w * data["current Redl"], rcond=None)[0]
+    dc = eq.c_l[2:] - c_fit
+    np.testing.assert_allclose(
+        np.linalg.norm(f), np.linalg.norm(w * (test @ dc)), rtol=1e-6
+    )
+    assert np.linalg.norm(dc) > 1e3
+
+
+@pytest.mark.regression
+def test_bootstrap_coupled_solve_tokamak():
+    """Test a single solve with bootstrap consistency finds the self-consistent state.
+
+    In this tokamak almost all the current is bootstrap current, and iteratively
+    re-solving the equilibrium with the "current Redl" profile oscillates instead of
+    converging, but solving for the current profile together with force balance
+    finds the fixed point of those iterations directly.
+    """
+    eq0 = _kinetic_tokamak(L=8, M=8)
+    eq0.solve(verbose=0, ftol=1e-8)
+    grid = LinearGrid(M=eq0.M_grid, N=0, rho=np.linspace(1 / 16, 1, 16) - 1 / (2 * 16))
+    constraints = lambda eq: (
+        FixAtomicNumber(eq=eq),
+        FixBoundaryR(eq=eq),
+        FixBoundaryZ(eq=eq),
+        FixCurrent(eq=eq, indices=[0, 1]),
+        FixElectronDensity(eq=eq),
+        FixElectronTemperature(eq=eq),
+        FixIonTemperature(eq=eq),
+        FixPsi(eq=eq),
+    )
+
+    def fixed_point_update(eq):
+        # current profile of the next iteration of the iterative method
+        data = eq.compute("current Redl", grid)
+        current = grid.compress(data["current Redl"])
+        rho = grid.compress(data["rho"])
+        XX = np.fliplr(np.vander(rho, eq.L + 1)[:, :-2])
+        return np.pad(np.linalg.lstsq(XX, current, rcond=None)[0], (2, 0))
+
+    # fit the current profile, as the iterations do
+    eq1 = eq0.copy()
+    objective = ObjectiveFunction(
+        (
+            ForceBalance(eq1),
+            BootstrapRedlCurrentConsistency(eq1, grid=grid, quantity="current"),
+        )
+    )
+    eq1.solve(objective=objective, constraints=constraints(eq1), ftol=1e-8, verbose=3)
+    # fit <J*B>, as optimizing for BootstrapRedlConsistency does
+    eq3 = eq0.copy()
+    objective = ObjectiveFunction(
+        (ForceBalance(eq3), BootstrapRedlCurrentConsistency(eq3, grid=grid))
+    )
+    eq3.solve(objective=objective, constraints=constraints(eq3), ftol=1e-8, verbose=3)
+
+    # eq1 is a fixed point of the iterations, and eq0 is far from it
+    rho = np.linspace(0.1, 1, 10)
+    I0 = np.max(np.abs(eq1.current(rho)))
+    assert I0 > 5e6
+    np.testing.assert_allclose(
+        PowerSeriesProfile(fixed_point_update(eq1), sym=False)(rho),
+        eq1.current(rho),
+        atol=2e-3 * I0,
+    )
+    assert np.max(np.abs(eq1.current(rho) - eq0.current(rho))) > 0.1 * I0
+
+    # fitting <J*B> gives a better fit of <J*B> and about the same current
+    lsq = ObjectiveFunction(BootstrapRedlConsistency(eq0, grid=grid))
+    lsq.build()
+    f0 = lsq.compute_scalar(lsq.x(eq0))
+    f1 = lsq.compute_scalar(lsq.x(eq1))
+    f3 = lsq.compute_scalar(lsq.x(eq3))
+    assert f3 < f1 < 1e-3 * f0
+    np.testing.assert_allclose(eq3.current(rho), eq1.current(rho), atol=2e-2 * I0)
+
+    grid = LinearGrid(M=eq0.M_grid, N=0, rho=np.linspace(0.2, 0.9, 8))
+    data = eq3.compute(["<J*B>", "<J*B> Redl"], grid)
+    J_dot_B = grid.compress(data["<J*B>"])
+    J_dot_B_Redl = grid.compress(data["<J*B> Redl"])
+    np.testing.assert_allclose(
+        J_dot_B, J_dot_B_Redl, atol=3e-2 * np.max(np.abs(J_dot_B_Redl))
     )

@@ -45,6 +45,7 @@ from desc.objectives import (
     AspectRatio,
     BallooningStability,
     BootstrapRedlConsistency,
+    BootstrapRedlCurrentConsistency,
     BoundaryError,
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
@@ -3506,6 +3507,7 @@ class TestComputeScalarResolution:
     specials = [
         # these require special logic
         BootstrapRedlConsistency,
+        BootstrapRedlCurrentConsistency,
         BoundaryError,
         CoilArclengthVariance,
         CoilCurrentLength,
@@ -3583,6 +3585,36 @@ class TestComputeScalarResolution:
             )
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+
+    @pytest.mark.regression
+    @pytest.mark.parametrize("quantity", ["<J*B>", "current"])
+    def test_compute_scalar_resolution_bootstrap_current(self, quantity):
+        """BootstrapRedlCurrentConsistency."""
+        eq = self.eq.copy()
+        eq.pressure = None
+        eq.electron_density = PowerSeriesProfile([1e19, 0, -1e19])
+        eq.electron_temperature = PowerSeriesProfile([1e3, 0, -1e3])
+        eq.ion_temperature = PowerSeriesProfile([1e3, 0, -1e3])
+        eq.atomic_number = 1.0
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", "Setting toroidal current profile")
+            warnings.filterwarnings("ignore", "current profile is not an even")
+            eq.current = PowerSeriesProfile([0, 0, 1e4], sym=False)
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            grid = LinearGrid(
+                M=int(self.eq.M * res), N=int(self.eq.N * res), NFP=self.eq.NFP, rho=0.7
+            )
+            obj = ObjectiveFunction(
+                BootstrapRedlCurrentConsistency(
+                    eq=eq, grid=grid, quantity=quantity, indices=[2]
+                ),
+                use_jit=False,
+            )
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        assert f[-1] > 0
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
 
     @pytest.mark.regression
@@ -4063,6 +4095,7 @@ class TestObjectiveNaNGrad:
         # these require special logic
         BallooningStability,
         BootstrapRedlConsistency,
+        BootstrapRedlCurrentConsistency,
         BoundaryError,
         CoilArclengthVariance,
         CoilCurrentLength,
@@ -4169,6 +4202,25 @@ class TestObjectiveNaNGrad:
         obj.build()
         g = obj.grad(obj.x(eq))
         assert not np.any(np.isnan(g)), "redl bootstrap"
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("quantity", ["<J*B>", "current"])
+    def test_objective_no_nangrad_bootstrap_current(self, quantity):
+        """BootstrapRedlCurrentConsistency."""
+        eq = Equilibrium(
+            L=2,
+            M=2,
+            N=2,
+            electron_density=PowerSeriesProfile([1e19, 0, -1e19]),
+            electron_temperature=PowerSeriesProfile([1e3, 0, -1e3]),
+            current=PowerSeriesProfile([0, 0, -1]),
+        )
+        obj = ObjectiveFunction(
+            BootstrapRedlCurrentConsistency(eq, quantity=quantity), use_jit=False
+        )
+        obj.build()
+        g = obj.grad(obj.x(eq))
+        assert not np.any(np.isnan(g)), "redl bootstrap current"
 
     @pytest.mark.unit
     def test_objective_no_nangrad_fusion_power(self):

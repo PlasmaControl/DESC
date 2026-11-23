@@ -1,6 +1,6 @@
 """Classes defining objectives for equilibrium and optimization."""
 
-from ._bootstrap import BootstrapRedlConsistency
+from ._bootstrap import BootstrapRedlConsistency, BootstrapRedlCurrentConsistency
 from ._coils import (
     CoilArclengthVariance,
     CoilCurrentLength,
@@ -113,6 +113,7 @@ __all__ = [
     "BScaleLength",
     "BallooningStability",
     "BootstrapRedlConsistency",
+    "BootstrapRedlCurrentConsistency",
     "BoundaryError",
     "CoilArclengthVariance",
     "CoilCurrentLength",

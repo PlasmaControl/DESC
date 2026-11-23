@@ -153,6 +153,7 @@ Profiles
     desc.objectives.ToroidalCurrent
     desc.objectives.Pressure
     desc.objectives.BootstrapRedlConsistency
+    desc.objectives.BootstrapRedlCurrentConsistency
 
 
 Power Balance

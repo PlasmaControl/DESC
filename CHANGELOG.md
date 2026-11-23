@@ -1,6 +1,10 @@
 Changelog
 =========
 
+New Features
+
+- Adds ``BootstrapRedlCurrentConsistency`` objective, a bootstrap current self-consistency residual with one equation for each free current profile coefficient. Together with ``ForceBalance`` it lets ``Equilibrium.solve`` find an equilibrium with a self-consistent Redl bootstrap current in a single solve, with the current profile as an additional unknown, instead of optimizing the current profile for ``BootstrapRedlConsistency`` or repeatedly re-solving the equilibrium with the ``"current Redl"`` profile. ``quantity="<J*B>"`` (default) gives the same solution as the optimization, and ``quantity="current"`` the same solution that the repeated solves converge to. For the example in the bootstrap current tutorial this is about 6x faster than the optimization and 2x faster than three iterations of re-solving (3x and 1.2x including compilation time), with the same accuracy. It also converges when re-solving does not, eg in a tokamak where most of the current is bootstrap current and the iterations oscillate. See the bootstrap current tutorial for an example.
+
 Bug Fixes
 
 - Fixes ``perturb`` with NumPy array weights and with 2D weight matrices.

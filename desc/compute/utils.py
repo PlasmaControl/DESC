@@ -446,6 +446,17 @@ def get_params(keys, obj, has_axis=False, basis="rpz"):
 
 
 @execute_on_cpu
+def _transform_method(jitable, method=None):
+    """The ``Transform`` method ``get_transforms`` builds with.
+
+    Uses input method if provided; otherwise defaults to auto.
+    """
+    if method is not None and method != "auto":
+        return method
+    return "jitable" if jitable else "auto"
+
+
+@execute_on_cpu
 def get_transforms(
     keys, obj, grid, jitable=False, has_axis=False, basis="rpz", **kwargs
 ):
@@ -477,8 +488,8 @@ def get_transforms(
     from desc.grid import LinearGrid
     from desc.transform import Transform
 
-    method = "jitable" if jitable or kwargs.get("method") == "jitable" else "auto"
     keys = [keys] if isinstance(keys, str) else keys
+    method = _transform_method(jitable, kwargs.get("method"))
     has_axis = has_axis or (grid is not None and grid.axis.size)
     derivs = get_derivs(keys, obj, has_axis=has_axis, basis=basis)
     transforms = {"grid": grid}

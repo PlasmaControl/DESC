@@ -2,9 +2,11 @@
 
 import pickle
 import warnings
+from importlib.metadata import version
 
 import numpy as np
 import pytest
+from packaging.version import Version
 
 from desc.coils import (
     FourierPlanarCoil,
@@ -35,6 +37,9 @@ from desc.magnetic_fields import (
 from desc.utils import ResolutionWarning, apply, errorif, xyz2rpz, xyz2rpz_vec
 
 NUFFTAX = NUFFT_BACKEND == "nufftax"
+OLD_FINUFFT = NUFFT_BACKEND == "jax-finufft" and Version(
+    version("jax-finufft")
+) <= Version("1.2.0")
 
 
 def _compare_against_master(
@@ -49,8 +54,9 @@ def _compare_against_master(
                 mean = np.mean(np.atleast_1d(np.abs(master_data[p][name])))
             try:
                 # reference data for NUFFT quantities is computed with jax-finufft
-                rtol = 1e-5 if "Gamma_" in name and NUFFTAX else 1e-8
-                atol = 1e-4 if "Gamma_" in name and NUFFTAX else 1e-8
+                uses_approximate_gamma = "Gamma_" in name and (NUFFTAX or OLD_FINUFFT)
+                rtol = 1e-5 if uses_approximate_gamma else 1e-8
+                atol = 1e-4 if uses_approximate_gamma else 1e-8
                 atol = atol * mean + 1e-9  # add 1e-9 for basically-zero things
                 err_msg = f"Parameterization: {p}. Name: {name}."
                 assert np.isfinite(mean).all(), err_msg

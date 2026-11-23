@@ -30,11 +30,11 @@ jobs:
             0.10.1,
             0.10.2,
             0.11.0,
-            0.11.1,
           ]
           # 0.7.0 have performance issues but we still support it, see diffrax#680
           # 0.7.1 fails with equinox, see equinox#1081
           # 0.8.2 and 0.9.0 are skipped due to interpax_fft
+          # 0.11.1 and 0.11.2 have bug with CI's 4 core system, see jax#41265
         group: [1, 2]
     steps:
       - uses: actions/checkout@v7

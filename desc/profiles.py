@@ -243,11 +243,10 @@ class _Profile(IOAble, ABC):
                 or isinstance(self, HermiteSplineProfile)
                 or isinstance(self, FourierZernikeProfile)
             ):
-                copy.params = copy.params * x
+                copy.params *= x
                 return copy
             if isinstance(self, TwoPowerProfile):
-                # params = [scale, 1st pow, 2nd pow]
-                copy.params = copy.params * jnp.array([x, 1, 1])
+                copy.params *= jnp.array([x, 1, 1])  # [scale, 1st power, 2nd power]
                 return copy
             return ScaledProfile(x, self)
         elif isinstance(x, _Profile):

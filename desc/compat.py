@@ -31,6 +31,8 @@ def ensure_positive_jacobian(eq):
     -------
     eq : Equilibrium or iterable of Equilibrium
         Same as input, but with coefficients adjusted to give right-handed coordinates.
+        Note that this may change the iota/current profile type and its number of
+        optimizable parameters.
 
     """
     # maybe it's iterable:
@@ -90,7 +92,8 @@ def flip_helicity(eq):
     Returns
     -------
     eq : Equilibrium or iterable of Equilibrium
-        Same as input, but with the opposite sign helicity.
+        Same as input, but with the opposite sign helicity. Note that this may
+        change the iota/current profile type and its number of optimizable parameters.
 
     """
     # maybe it's iterable:
@@ -140,7 +143,8 @@ def flip_magnetic_field(eq):
     Returns
     -------
     eq : Equilibrium or iterable of Equilibrium
-        Same as input, but with the reverse direction magnetic field.
+        Same as input, but with the reverse direction magnetic field. Note that this may
+        change the current profile type and its number of optimizable parameters.
 
     """
     # maybe it's iterable:
@@ -240,12 +244,8 @@ def rescale(
     eq : Equilibrium or iterable of Equilibrium
         Equilibrium input rescaled to the desired size and magnetic field strength.
         The current profile (but not iota) is multiplied by a constant, as are the
-        pressure or kinetic profiles if scale_pressure is True.
-        ``PowerSeriesProfile``, ``SplineProfile``, ``HermiteSplineProfile``,
-        ``FourierZernikeProfile``, and ``TwoPowerProfile`` types keep their type with
-        rescaled parameters, and a ``ScaledProfile`` has its ``scale`` updated.
-        Other profile types become a ``ScaledProfile``, which changes the number of
-        optimizable parameters of the profile by adding ``scale`` to the first index.
+        pressure or kinetic profiles if scale_pressure is True. Note that this may
+        change the profile types and their number of optimizable parameters.
 
     """
     # maybe it's iterable:
@@ -448,9 +448,10 @@ def contract_equilibrium(
     Returns
     -------
     eq_inner: New Equilibrium object, contracted from the old one such that
-        eq.pressure(rho=inner_rho) = eq_inner.pressure(rho=1), and
-        eq_inner LCFS = eq's rho=inner_rho surface.
-        Note that this will not be in force balance, and so must be re-solved.
+    eq.pressure(rho=inner_rho) = eq_inner.pressure(rho=1), and eq_inner LCFS = eq's
+    rho=inner_rho surface. Note that this may change the profile types and their number
+    of optimizable parameters. Note that this will not be in force balance, and so must
+    be re-solved.
 
     """
     errorif(
@@ -479,8 +480,7 @@ def contract_equilibrium(
         if contract_profiles and is_power_series:
             # only PowerSeriesProfile both
             # a) has a from_values
-            # b) can safely use that from_values to represent a
-            #    subset of itself.
+            # b) can safely use that from_values to represent a subset of itself
             x = np.linspace(0, 1, profile_num_points)
             grid = LinearGrid(rho=x / rho)
             y = profile.compute(grid)

@@ -622,9 +622,7 @@ class Transform(IOAble):
             A = self.matrices["pest"].get(dr, {}).get(dt, {})
             B = self.matrices["pest_toroidal"].get(dz, {})
             if isinstance(A, dict) or isinstance(B, dict):
-                raise ValueError(
-                    colored("Derivative orders are out of initialized bounds", "red")
-                )
+                raise ValueError("Derivative orders are out of initialized bounds")
             c_mtrx = jnp.zeros((self.num_lm_modes * self.num_n_modes,))
             c_mtrx = put(c_mtrx, self.fft_index, c).reshape((-1, self.num_n_modes))
             # evaluate radial and poloidal factor at each node

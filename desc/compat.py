@@ -448,10 +448,10 @@ def contract_equilibrium(
     Returns
     -------
     eq_inner: New Equilibrium object, contracted from the old one such that
-    eq.pressure(rho=inner_rho) = eq_inner.pressure(rho=1), and eq_inner LCFS = eq's
-    rho=inner_rho surface. Note that this may change the profile types and their number
-    of optimizable parameters. Note that this will not be in force balance, and so must
-    be re-solved.
+        eq.pressure(rho=inner_rho) = eq_inner.pressure(rho=1), and eq_inner LCFS = eq's
+        rho=inner_rho surface. Note that this may change the profile types and their
+        number of optimizable parameters. Note that this will not be in force balance,
+        and so must be re-solved.
 
     """
     errorif(

@@ -1,6 +1,14 @@
 Changelog
 =========
 
+Bug Fixes
+
+- Fixes ``perturb`` with NumPy array weights and with 2D weight matrices.
+
+
+v0.17.4
+-------
+
 New Features
 
 - Adds support for rank 2 tensor quantities such as ``grad(B)`` in ``compute(..., basis="xyz")``, which previously raised ``NotImplementedError``. ``grad(B)`` and the quantities computed from it (``|grad(B)|`` and ``L_grad(B)``) can now be computed in the ``xyz`` basis.

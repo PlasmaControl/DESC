@@ -457,11 +457,11 @@ def _project_x_scale(x_scale, objective):
         )
         # Split x_scale by things to handle multiple things (eq + coils, etc.)
         x_scale = jnp.split(x_scale, np.cumsum(prox_obj._dimx_per_thing)[:-1])
-        # Project equilibrium part: remove excluded parameters
-        excluded_params = ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]
+        # Project equilibrium part: keep only the parameters that the proximal
+        # projection keeps as optimization variables
         included_idx = []
         for arg in prox_obj._eq.optimizable_params:
-            if arg not in excluded_params:
+            if arg in prox_obj._args:
                 included_idx.extend(prox_obj._eq.x_idx[arg])
         x_scale[prox_obj._eq_idx] = x_scale[prox_obj._eq_idx][jnp.array(included_idx)]
         x_scale = jnp.concatenate(x_scale)

@@ -855,6 +855,22 @@ def test_compat_transformations_with_omega():
 
 
 @pytest.mark.unit
+def test_proximal_x_scale_with_omega():
+    """Projecting x_scale for ProximalProjection drops the solved omega state."""
+    from desc.objectives import AspectRatio, ForceBalance, ObjectiveFunction
+    from desc.optimize import ProximalProjection
+    from desc.optimize.optimizer import _project_x_scale
+
+    eq = _eq_with_omega()
+    prox = ProximalProjection(
+        ObjectiveFunction(AspectRatio(eq)), ObjectiveFunction(ForceBalance(eq)), eq
+    )
+    prox.build(verbose=0)
+    x_scale = eq.pack_params(eq.params_dict)
+    np.testing.assert_allclose(_project_x_scale(x_scale, prox), prox.x(eq))
+
+
+@pytest.mark.unit
 def test_exporters_refuse_omega(tmpdir):
     """Output formats that assume zeta = phi raise when omega != 0."""
     from desc.external.terpsichore import TERPSICHORE

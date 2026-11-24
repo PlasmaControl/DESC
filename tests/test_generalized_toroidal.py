@@ -788,6 +788,32 @@ def test_area_on_solved_omega_equilibrium(eq_omega):
     assert abs(elong / direct_elong - 1) < 0.05
 
 
+@pytest.mark.unit
+def test_average_geometry_independent_of_omega():
+    """A, R0, a, R0/a depend only on the physical surface, not the toroidal angle."""
+    surf = _make_synthetic_surface()
+    T, ZE, coords = _sample_surface(surf)
+    # same physical surface, parameterized by the cylindrical angle (omega = 0)
+    surf0 = FourierRZToroidalSurface.from_values(
+        coords, T, zeta=coords[:, 1], M=6, N=6, NFP=1, sym=True
+    )
+    keys = ["A", "R0", "a", "R0/a"]
+    for obj, obj0 in [
+        (surf, surf0),
+        (Equilibrium(surface=surf), Equilibrium(surface=surf0)),
+    ]:
+        data, data0 = obj.compute(keys), obj0.compute(keys)
+        for key in keys:
+            np.testing.assert_allclose(data[key], data0[key], rtol=1e-12, err_msg=key)
+    # with zeta = phi the phi-average is the mean area of the constant zeta
+    # sections; with omega != 0 those sections differ, so the check is not vacuous
+    grid = LinearGrid(M=16, N=16, NFP=1, sym=False)
+    A_z0 = np.mean(surf0.compute("A(z)", grid=grid)["A(z)"])
+    A_z = np.mean(surf.compute("A(z)", grid=grid)["A(z)"])
+    np.testing.assert_allclose(data0["A"], A_z0, rtol=1e-12)
+    assert abs(A_z / A_z0 - 1) > 5e-3
+
+
 class TestPlottingWithOmega:
     """Constant-phi plots on an equilibrium whose zeta is not phi.
 

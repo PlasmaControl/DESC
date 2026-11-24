@@ -1882,11 +1882,23 @@ class VMECIO:
         # Note: theta* (also known as vartheta) is the poloidal straight field line
         # angle in PEST-like flux coordinates
 
-        # find theta angles corresponding to desired theta* angles
-        v_grid = Grid(
-            equil.map_coordinates(t_grid.nodes, inbasis=("rho", "theta_PEST", "zeta"))
-        )
-        r_coords_desc = equil.compute(["R", "Z"], grid=r_grid)
+        # The VMEC toroidal angle is the cylindrical angle phi, so the toroidal
+        # values of both grids are phi. With a generalized toroidal angle the DESC
+        # points are found on those constant phi planes, not at zeta = phi.
+        if equil.W_basis.num_modes:
+            from desc.plotting import _pest_phi_to_zeta, _phi_to_zeta_bisect
+
+            r_grid_desc = Grid(_phi_to_zeta_bisect(equil, r_grid.nodes), sort=False)
+            v_grid = Grid(_pest_phi_to_zeta(equil, t_grid.nodes), sort=False)
+        else:
+            r_grid_desc = r_grid
+            # find theta angles corresponding to desired theta* angles
+            v_grid = Grid(
+                equil.map_coordinates(
+                    t_grid.nodes, inbasis=("rho", "theta_PEST", "zeta")
+                )
+            )
+        r_coords_desc = equil.compute(["R", "Z"], grid=r_grid_desc)
         v_coords_desc = equil.compute(["R", "Z"], grid=v_grid)
 
         # rho contours

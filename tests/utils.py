@@ -14,7 +14,7 @@ from desc.vmec import VMECIO
 
 
 def compute_coords(equil, Nr=10, Nt=8, Nz=None):
-    """Computes coordinate values from a given equilibrium."""
+    """Computes rho and vartheta contours on planes of constant phi."""
     if Nz is None and equil.N == 0:
         Nz = 1
     elif Nz is None:
@@ -38,11 +38,21 @@ def compute_coords(equil, Nr=10, Nt=8, Nz=None):
     # Note: theta* (also known as vartheta) is the poloidal straight field-line
     # angle in PEST-like flux coordinates
 
-    # find theta angles corresponding to desired theta* angles
-    v_grid = Grid(
-        equil.map_coordinates(t_grid.nodes, inbasis=("rho", "theta_PEST", "zeta"))
-    )
-    r_coords = equil.compute(["R", "Z"], grid=r_grid)
+    # The toroidal values of both grids are the cylindrical angle phi, so that
+    # equilibria with different toroidal angles (omega) are compared on the same
+    # physical planes.
+    if equil.W_basis.num_modes:
+        from desc.plotting import _pest_phi_to_zeta, _phi_to_zeta_bisect
+
+        r_grid_eq = Grid(_phi_to_zeta_bisect(equil, r_grid.nodes), sort=False)
+        v_grid = Grid(_pest_phi_to_zeta(equil, t_grid.nodes), sort=False)
+    else:
+        r_grid_eq = r_grid
+        # find theta angles corresponding to desired theta* angles
+        v_grid = Grid(
+            equil.map_coordinates(t_grid.nodes, inbasis=("rho", "theta_PEST", "zeta"))
+        )
+    r_coords = equil.compute(["R", "Z"], grid=r_grid_eq)
     v_coords = equil.compute(["R", "Z"], grid=v_grid)
 
     # rho contours

@@ -1254,7 +1254,8 @@ class TestMagneticFields:
         np.testing.assert_allclose(e_fine, max_err(65, 4, "cubic"), rtol=1e-3)
 
     @pytest.mark.unit
-    def test_spline_field_periodic_phi(self):  # noqa: D102
+    def test_spline_field_periodic_phi(self):
+        """Test spline field accuracy across the phi wrap, for gh issue #2436."""
         NFP = 5
         R = np.linspace(0.5, 1.5, 6)
         Z = np.linspace(-0.5, 0.5, 6)

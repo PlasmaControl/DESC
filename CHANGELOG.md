@@ -4,6 +4,7 @@ Changelog
 Bug Fixes
 
 - Fixes ``desc.set_device("gpu")`` raising ``ValueError`` when ``CUDA_VISIBLE_DEVICES`` lists GPU UUIDs or prefixes of them.
+- Fixes ``perturb`` with NumPy array weights and with 2D weight matrices.
 
 
 v0.17.4

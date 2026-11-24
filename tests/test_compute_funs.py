@@ -1906,19 +1906,43 @@ def test_iota_components():
     eq_i = get("DSHAPE")  # iota profile assigned
     eq_c = get("DSHAPE_CURRENT")  # current profile assigned
     grid = LinearGrid(L=100, M=max(eq_i.M_grid, eq_c.M_grid), N=0, NFP=1, axis=True)
-    data_i = eq_i.compute(["iota", "iota current", "iota vacuum"], grid)
-    data_c = eq_c.compute(["iota", "iota current", "iota vacuum"], grid)
+    names = ["iota", "iota current", "iota vacuum", "iota_r vacuum"]
+    data_i = eq_i.compute(names, grid)
+    data_c = eq_c.compute(names, grid)
     np.testing.assert_allclose(data_i["iota"], data_i["iota current"])
     np.testing.assert_allclose(data_c["iota"], data_c["iota current"])
     np.testing.assert_allclose(data_i["iota vacuum"], 0)
     np.testing.assert_allclose(data_c["iota vacuum"], 0)
+    np.testing.assert_allclose(data_i["iota_r vacuum"], 0, atol=1e-12)
+    np.testing.assert_allclose(data_c["iota_r vacuum"], 0, atol=1e-12)
 
     # vacuum stellarator, so all rotational transform should be from the external field
     eq = get("ESTELL")
     grid = LinearGrid(L=100, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, axis=True)
-    data = eq.compute(["iota", "iota current", "iota vacuum"], grid)
+    data = eq.compute(names + ["iota_r"], grid)
     np.testing.assert_allclose(data["iota"], data["iota vacuum"])
     np.testing.assert_allclose(data["iota current"], 0)
+    np.testing.assert_allclose(data["iota_r"], data["iota_r vacuum"])
+
+    # stellarator with finite current, so iota_r vacuum differs from iota_r
+    # compare to second order central finite difference of iota vacuum
+    eq = get("NCSX")
+    rho = np.linspace(0.1, 0.9, 9)
+    h = 1e-4
+    grid = LinearGrid(
+        rho=np.concatenate([rho - h, rho, rho + h]),
+        M=eq.M_grid,
+        N=eq.N_grid,
+        NFP=eq.NFP,
+        sym=eq.sym,
+    )
+    data = eq.compute(["iota vacuum", "iota_r vacuum"], grid)
+    # grid sorts rho, so each row is the stencil (rho - h, rho, rho + h)
+    iota_vac = grid.compress(data["iota vacuum"]).reshape(-1, 3)
+    iota_r_vac = grid.compress(data["iota_r vacuum"]).reshape(-1, 3)[:, 1]
+    np.testing.assert_allclose(
+        iota_r_vac, (iota_vac[:, 2] - iota_vac[:, 0]) / (2 * h), atol=1e-6
+    )
 
 
 @pytest.mark.unit

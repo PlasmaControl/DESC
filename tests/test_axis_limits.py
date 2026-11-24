@@ -24,7 +24,18 @@ from desc.utils import dot, errorif, getsource
 # functions tend toward zero as the magnetic axis is approached and that
 # d²ψ/(dρ)² and 𝜕√𝑔/𝜕𝜌 are both finite nonzero at the magnetic axis.
 # Also, dⁿψ/(dρ)ⁿ for n > 3 is assumed zero everywhere.
-zero_limits = {"rho", "psi", "psi_r", "psi_rrr", "e_theta", "sqrt(g)", "B_t", "iota_r"}
+zero_limits = {
+    "rho",
+    "psi",
+    "psi_r",
+    "psi_rrr",
+    "e_theta",
+    "sqrt(g)",
+    "B_t",
+    "iota_r",
+    "iota_r vacuum",
+    "iota_num_rr vacuum",
+}
 
 # These compute quantities require kinetic profiles, which are not defined for all
 # configurations (giving NaN values). Gamma_c is 0 on axis.

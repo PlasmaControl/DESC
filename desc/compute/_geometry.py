@@ -253,20 +253,26 @@ def _A_of_z(params, transforms, profiles, data, **kwargs):
     label="A",
     units="m^{2}",
     units_long="square meters",
-    description="Average enclosed cross-sectional (constant zeta surface) area, "
-    "extrapolated to last closed flux surface." + NOTE_CONST_ZETA,
+    description="Area of enclosed planar cross-section (constant cylindrical phi "
+    "plane), averaged over phi, extrapolated to last closed flux surface",
     dim=0,
     params=[],
     transforms={"grid": []},
     profiles=[],
     coordinates="",
-    data=["Z", "n_rho", "e_theta", "rho", "|e_rho x e_theta|"],
+    data=["sqrt(g)", "R", "A(r)", "rho"],
     parameterization=["desc.equilibrium.equilibrium.Equilibrium"],
-    resolution_requirement="tz",
+    resolution_requirement="rtz",
 )
 def _A(params, transforms, profiles, data, **kwargs):
-    # noqa: unused dependency
-    data["A"] = _compute_A_of_z(transforms["grid"], data, extrap=True, mean=True)
+    if isinstance(transforms["grid"], QuadratureGrid):
+        # Coarea formula with |∇ϕ| = 1/R: ∫ A(ϕ) dϕ = ∫ dV / R.
+        data["A"] = jnp.sum(data["sqrt(g)"] / data["R"] * transforms["grid"].weights)
+        data["A"] = data["A"] / (2 * jnp.pi)
+    else:
+        # To approximate area at ρ ~ 1, we scale by ρ⁻², assuming the integrand
+        # varies little from max ρ to ρ = 1 and a roughly circular cross-section.
+        data["A"] = jnp.max(data["A(r)"]) / jnp.max(data["rho"]) ** 2
     return data
 
 
@@ -348,19 +354,18 @@ def _A_of_z_flux_surface(params, transforms, profiles, data, **kwargs):
     label="A",
     units="m^{2}",
     units_long="square meters",
-    description="Average enclosed cross-sectional (constant zeta surface) area",
+    description="Area of enclosed planar cross-section (constant cylindrical phi "
+    "plane), averaged over phi",
     dim=0,
     params=[],
     transforms={"grid": []},
     profiles=[],
     coordinates="",
-    data=["Z", "n_rho", "e_theta", "rho"],
+    data=["A(r)"],
     parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
-    resolution_requirement="tz",
 )
 def _A_flux_surface(params, transforms, profiles, data, **kwargs):
-    # noqa: unused dependency
-    data["A"] = _compute_A_of_z(transforms["grid"], data, extrap=False, mean=True)
+    data["A"] = jnp.max(data["A(r)"])
     return data
 
 
@@ -369,21 +374,33 @@ def _A_flux_surface(params, transforms, profiles, data, **kwargs):
     label="A(\\rho)",
     units="m^{2}",
     units_long="square meters",
-    description="Average area of enclosed cross-section (enclosed constant zeta "
-    "surface), as function of rho",
+    description="Area enclosed by flux surfaces in planar cross-sections (constant "
+    "cylindrical phi plane), averaged over phi",
     dim=1,
     params=[],
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["R0", "V(r)"],
+    data=["e_theta", "e_zeta", "Z", "R"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
     ],
+    resolution_requirement="tz",
 )
 def _A_of_r(params, transforms, profiles, data, **kwargs):
-    data["A(r)"] = data["V(r)"] / (2 * jnp.pi * data["R0"])
+    # Averaging over the cylindrical angle ϕ rather than the computational toroidal
+    # angle ζ makes this a property of the physical surface alone, independent of
+    # how ζ is chosen. By the coarea formula with |∇ϕ| = 1/R, the ϕ-average of the
+    # planar cross-section area is ∫ A(ϕ) dϕ / (2π) = ∫ dV / R / (2π). With the
+    # divergence theorem, div [0, 0, Z/R] = 1/R, so the volume integral becomes
+    # integral(dS dot [0, 0, Z/R]) over the flux surface.
+    data["A(r)"] = jnp.abs(
+        surface_integrals(
+            transforms["grid"],
+            cross(data["e_theta"], data["e_zeta"])[:, 2] * data["Z"] / data["R"],
+        )
+    ) / (2 * jnp.pi)
     return data
 
 
@@ -494,7 +511,7 @@ def _S_rr_of_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="R0",
-    label="R_{0} = V / (2\\pi A) = \\int R(\\rho=0) d\\zeta / (2\\pi)",
+    label="R_{0} = V / (2\\pi A)",
     units="m",
     units_long="meters",
     description="Average major radius",
@@ -521,7 +538,7 @@ def _R0(params, transforms, profiles, data, **kwargs):
     label="a",
     units="m",
     units_long="meters",
-    description="Average minor radius." + NOTE_CONST_ZETA,
+    description="Average minor radius, sqrt(A / pi)",
     dim=0,
     params=[],
     transforms={},
@@ -569,7 +586,7 @@ def _a_of_z(params, transforms, profiles, data, **kwargs):
     label="R_{0} / a",
     units="~",
     units_long="None",
-    description="Aspect ratio." + NOTE_CONST_ZETA,
+    description="Aspect ratio",
     dim=0,
     params=[],
     transforms={},

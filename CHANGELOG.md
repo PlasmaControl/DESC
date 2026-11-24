@@ -4,6 +4,7 @@ Changelog
 Bug Fixes
 
 - Fixes ``perturb`` with NumPy array weights and with 2D weight matrices.
+- Fixes ``GenericObjective`` returning one value per node of the grid for quantities that depend on only ``theta`` or only ``zeta`` (such as ``A(z)`` and ``perimeter(z)``). As is already done for quantities that depend on only ``rho``, it now returns one value per unique ``theta`` or ``zeta``, so the length of its output, and of any ``target``, ``bounds`` or ``weight`` array given for such a quantity, is now ``grid.num_theta`` or ``grid.num_zeta`` instead of ``grid.num_nodes``.
 
 
 v0.17.4

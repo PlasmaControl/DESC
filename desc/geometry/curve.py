@@ -1421,9 +1421,6 @@ class FourierXYCurve(Curve):
 class SplineXYZCurve(Curve):
     """Closed curve parameterized by spline knots in X,Y,Z.
 
-    The spline is periodic in the curve parameter with period 2pi, so the curve is
-    always closed: after the last point, it goes back to the first point.
-
     Parameters
     ----------
     X, Y, Z: array-like

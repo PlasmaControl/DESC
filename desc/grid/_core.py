@@ -229,7 +229,10 @@ class AbstractGrid(IOAble, ABC):
         x = x.reshape(shape, order="F")
         # swap to change shape from trz/arz to rtz/raz etc.
         x = x.swapaxes(1, 0)
-        newax = [_replace_(self.coordinates).index(c) for c in _replace_(order)]
+        newax = [
+            _replace_underscores(self.coordinates).index(c)
+            for c in _replace_underscores(order)
+        ]
         if vec:
             newax += (3,)
         x = x.transpose(newax)
@@ -276,7 +279,10 @@ class AbstractGrid(IOAble, ABC):
         )
         vec = x.ndim == 4
         # reshape to radial/poloidal/toroidal
-        newax = tuple(_replace_(order).index(c) for c in _replace_(self.coordinates))
+        newax = tuple(
+            _replace_underscores(order).index(c)
+            for c in _replace_underscores(self.coordinates)
+        )
         if vec:
             newax += (3,)
         x = x.transpose(newax)
@@ -547,7 +553,7 @@ class AbstractGrid(IOAble, ABC):
         )
 
 
-def _replace_(old):
+def _replace_underscores(old):
     """Replace '_' with unique ints in coordinate strings."""
     i = 0
     new = []

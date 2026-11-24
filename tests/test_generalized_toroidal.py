@@ -854,6 +854,23 @@ def test_compat_transformations_with_omega():
     np.testing.assert_allclose(_xyz(new, r, t, z), _xyz(eq, inner * r, t, z), atol=1e-9)
 
 
+@pytest.mark.unit
+def test_exporters_refuse_omega(tmpdir):
+    """Output formats that assume zeta = phi raise when omega != 0."""
+    from desc.external.terpsichore import TERPSICHORE
+    from desc.io.ascii_io import write_ascii
+    from desc.vmec import VMECIO
+
+    eq = _eq_with_omega()
+    with pytest.raises(NotImplementedError, match="generalized toroidal angle"):
+        with pytest.warns(DeprecationWarning, match="text-based IO"):
+            write_ascii(str(tmpdir.join("eq.txt")), eq)
+    with pytest.raises(NotImplementedError, match="generalized toroidal angle"):
+        VMECIO.write_vmec_input(eq, str(tmpdir.join("input.eq")))
+    with pytest.raises(NotImplementedError, match="generalized toroidal angle"):
+        TERPSICHORE(eq, path=str(tmpdir), exec="xterps").build()
+
+
 class TestPlottingWithOmega:
     """Constant-phi plots on an equilibrium whose zeta is not phi.
 

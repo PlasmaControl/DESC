@@ -280,7 +280,7 @@ class VMECIO:
         errorif(
             np.any(eq.W_lmn),
             NotImplementedError,
-            "VMEC output requires cylindrical toroidal angle (omega = 0)"
+            "VMEC output requires cylindrical toroidal angle (omega = 0) "
             "but this equilibrium uses a generalized toroidal angle.",
         )
 
@@ -1484,6 +1484,12 @@ class VMECIO:
         None
 
         """
+        errorif(
+            np.any(eq.W_lmn),
+            NotImplementedError,
+            "VMEC input requires cylindrical toroidal angle (omega = 0) "
+            "but this equilibrium uses a generalized toroidal angle.",
+        )
         # open the file, unless its already open
         if not isinstance(fname, io.IOBase):
             f = open(fname, "w+")

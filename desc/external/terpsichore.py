@@ -893,6 +893,12 @@ class TERPSICHORE(ExternalObjective):
             ValueError,
             "Invalid mode family, must be <= eq.NFP // 2.",
         )
+        errorif(
+            np.any(self._eq.W_lmn),
+            NotImplementedError,
+            "TERPSICHORE requires cylindrical toroidal angle (omega = 0) "
+            "but this equilibrium uses a generalized toroidal angle.",
+        )
 
         # check if theta needs to be flipped so that theta=0 is on the outboard midplane
         grid0 = LinearGrid(rho=0.0, M=0, N=0)

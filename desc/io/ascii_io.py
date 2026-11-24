@@ -46,6 +46,12 @@ def write_ascii(fname, eq):  # noqa: C901
     from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
 
     errorif(
+        np.any(eq.W_lmn),
+        NotImplementedError,
+        "ascii output requires cylindrical toroidal angle (omega = 0) "
+        "but this equilibrium uses a generalized toroidal angle.",
+    )
+    errorif(
         isinstance(eq.pressure, FourierZernikeProfile)
         or isinstance(eq.iota, FourierZernikeProfile),
         ValueError,

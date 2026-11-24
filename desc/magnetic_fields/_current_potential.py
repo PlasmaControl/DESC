@@ -38,6 +38,16 @@ from ._core import (
 )
 
 
+def _omega_kwargs(surface):
+    """Keyword arguments that carry the toroidal angle omega of a surface."""
+    return {
+        "W_lmn": surface.W_lmn,
+        "modes_W": surface.W_basis.modes[:, 1:],
+        "Mw": surface.Mw,
+        "Nw": surface.Nw,
+    }
+
+
 class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
     """Magnetic field due to a surface current potential on a toroidal surface.
 
@@ -84,6 +94,17 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         ensure that this surface has a right handed orientation. Do not set to False
         unless you are sure the parameterization you have given is right handed
         (ie, e_theta x e_zeta points outward from the surface).
+    W_lmn : array-like, shape(k,)
+        Fourier coefficients for the toroidal stream function omega of the winding
+        surface, which relates the toroidal coordinate zeta to the cylindrical
+        toroidal angle by phi = zeta + omega. Keyword only. Default is zero, ie
+        phi = zeta.
+    modes_W : array-like, shape(k,2)
+        poloidal and toroidal mode numbers [m,n] for W_lmn. Keyword only.
+    Mw, Nw : int or None
+        Maximum poloidal and toroidal mode numbers of the omega basis. Keyword
+        only. Default to the maximum from modes_W, ie zero if omega is not
+        given.
 
     """
 
@@ -117,6 +138,11 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         N=None,
         name="",
         check_orientation=True,
+        *,
+        W_lmn=None,
+        modes_W=None,
+        Mw=None,
+        Nw=None,
     ):
         assert callable(potential), "Potential must be callable!"
         assert callable(potential_dtheta), "Potential derivative must be callable!"
@@ -138,6 +164,10 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             N=N,
             name=name,
             check_orientation=check_orientation,
+            W_lmn=W_lmn,
+            modes_W=modes_W,
+            Mw=Mw,
+            Nw=Nw,
         )
 
     # TODO: make this an optimizable parameter so the potential may be optimized
@@ -398,6 +428,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             sym,
             name=name,
             check_orientation=False,
+            **_omega_kwargs(surface),
         )
 
 
@@ -466,6 +497,17 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         ensure that this surface has a right handed orientation. Do not set to False
         unless you are sure the parameterization you have given is right handed
         (ie, e_theta x e_zeta points outward from the surface).
+    W_lmn : array-like, shape(k,)
+        Fourier coefficients for the toroidal stream function omega of the winding
+        surface, which relates the toroidal coordinate zeta to the cylindrical
+        toroidal angle by phi = zeta + omega. Keyword only. Default is zero, ie
+        phi = zeta.
+    modes_W : array-like, shape(k,2)
+        poloidal and toroidal mode numbers [m,n] for W_lmn. Keyword only.
+    Mw, Nw : int or None
+        Maximum poloidal and toroidal mode numbers of the omega basis. Keyword
+        only. Default to the maximum from modes_W, ie zero if omega is not
+        given.
 
     """
 
@@ -505,6 +547,11 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         N=None,
         name="",
         check_orientation=True,
+        *,
+        W_lmn=None,
+        modes_W=None,
+        Mw=None,
+        Nw=None,
     ):
         Phi_mn, modes_Phi = map(np.asarray, (Phi_mn, modes_Phi))
         assert (
@@ -537,6 +584,10 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             N=N,
             name=name,
             check_orientation=check_orientation,
+            W_lmn=W_lmn,
+            modes_W=modes_W,
+            Mw=Mw,
+            Nw=Nw,
         )
 
     @optimizable_parameter
@@ -841,6 +892,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             sym=sym,
             name=name,
             check_orientation=False,
+            **_omega_kwargs(surface),
         )
 
     def to_CoilSet(  # noqa: C901 - FIXME: simplify this
@@ -1139,9 +1191,9 @@ def _compute_A_or_B_from_CurrentPotentialField(
 
     def nfp_loop(j, f):
         # calculate (by rotating) rs, rs_t, rz_t
-        phi = (source_grid.nodes[:, 2] + j * 2 * jnp.pi / source_grid.NFP) % (
-            2 * jnp.pi
-        )
+        # The source points sit at the cylindrical angle phi = zeta + omega of the
+        # winding surface, which differs from the grid's zeta when omega != 0.
+        phi = (_rs[:, 1] + j * 2 * jnp.pi / source_grid.NFP) % (2 * jnp.pi)
         # new coords are just old R,Z at a new phi (bc of discrete NFP symmetry)
         rs = jnp.vstack((_rs[:, 0], phi, _rs[:, 2])).T
         rs = rpz2xyz(rs)

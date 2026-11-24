@@ -887,6 +887,37 @@ def test_exporters_refuse_omega(tmpdir):
         TERPSICHORE(eq, path=str(tmpdir), exec="xterps").build()
 
 
+@pytest.mark.unit
+def test_current_potential_field_with_omega():
+    """A current potential keeps the winding surface omega and its physical field."""
+    from desc.magnetic_fields import FourierCurrentPotentialField
+
+    surf = _make_synthetic_surface()
+    T, ZE, coords = _sample_surface(surf)
+    # same physical surface, parameterized by the cylindrical angle (omega = 0)
+    surf0 = FourierRZToroidalSurface.from_values(
+        coords, T, zeta=coords[:, 1], M=6, N=6, NFP=1, sym=True
+    )
+    # Phi = G phi / 2pi + I theta / 2pi on both surfaces. With phi = zeta + omega
+    # the single valued part is G omega / 2pi, exactly representable in omega's basis.
+    G, I = 1e6, 2e5
+    field0 = FourierCurrentPotentialField.from_surface(surf0, I=I, G=G)
+    field = FourierCurrentPotentialField.from_surface(
+        surf,
+        Phi_mn=G / (2 * np.pi) * np.asarray(surf.W_lmn),
+        modes_Phi=surf.W_basis.modes[:, 1:],
+        I=I,
+        G=G,
+    )
+    np.testing.assert_allclose(field.W_lmn, surf.W_lmn)
+
+    coords = np.array([[10.0, 0.0, 0.0], [10.2, 1.0, 0.3], [9.8, 2.5, -0.2]])
+    grid = LinearGrid(M=64, N=64, NFP=1, sym=False)
+    B0 = field0.compute_magnetic_field(coords, source_grid=grid)
+    B = field.compute_magnetic_field(coords, source_grid=grid)
+    np.testing.assert_allclose(B, B0, atol=2e-3 * np.abs(B0).max())
+
+
 class TestPlottingWithOmega:
     """Constant-phi plots on an equilibrium whose zeta is not phi.
 

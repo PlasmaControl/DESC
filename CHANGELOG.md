@@ -1,6 +1,15 @@
 Changelog
 =========
 
+New Features
+
+- Restructures the grid classes to allow for new grids in different coordinate systems besides flux coordinates. The old grid classes are aliased to the new grids of type ``AbstractGridFlux`` and are backwards compatible with the new API. ``Curve`` objects now expect a compute grid of type ``AbstractGridCurve``, and ``FourierRZToroidalSurface`` objects now expect a compute grid of type ``AbstractGridToroidalSurface``.
+
+Breaking Changes and Deprecations
+
+- ``Curve`` and ``FourierRZToroidalSurface`` objects now expect grids of type ``AbstractGridCurve`` and ``AbstractGridToroidalSurface``, respectively. Their support for grids of type ``AbstractGridFlux`` is deprecated and will be removed in a future release.
+- The unused x0 and x1 coordinates for ``AbstractGridToroidalSurface`` and ``AbstractGridCurve`` grids now have values of 0. The previous default was ``rho=1.0`` for 1D and 2D grids.
+
 Bug Fixes
 
 - Fixes ``desc.set_device("gpu")`` raising ``ValueError`` when ``CUDA_VISIBLE_DEVICES`` lists GPU UUIDs or prefixes of them.
@@ -43,7 +52,6 @@ Breaking Changes and Deprecations
 - Objectives using ``Bounce2D`` now do not support fwd mode differentiation for JAX versions <0.11.0.
 - ``rotation_matrix`` utility function now accepts either an axis and an angle as arguments (previous behavior), OR a vector and a vector. In the latter case, the rotation matrix returned will rotate the first vector onto the second, using quaternions which avoids the NaN gradient issue that the axis-angle form can have at vertical normals. Note that these are positional arguments, and the kwargs ``axis`` and ``angle`` are now deprecated.
 - Public modules now define ``__all__`` matching the API documentation, which makes the public API explicit for IDEs, type checkers and other tools. Note that ``from desc.<module> import *`` now only imports the documented public names.
-
 
 Bug Fixes
 
@@ -162,7 +170,6 @@ Bug Fixes
 - Fixes incorrect units in the documentation of some curvature variables.
 
 
-
 v0.17.0
 -------
 
@@ -230,8 +237,6 @@ New Features
     - ``poincare_plot`` and ``plot_field_lines`` functions can now plot partial results if the integration failed. Previously, user had to pass ``throw=False`` or change the integration parameters. Users can ignore the warnings that are caused by hitting the bounds (i.e. `Terminating differential equation solve because an event occurred.`).
     - `chunk_size` argument is now used for chunking the number of field lines. For the chunking of Biot-Savart integration for the magnetic field, users can use `bs_chunk_size` instead.
 
-
-
 Bug Fixes
 
 - Fixes straight field line equilibrium conversion, see #1880
@@ -288,6 +293,7 @@ Backend
 
 - Significant changes to how DESC handles static attributes during JIT compilation. Going forward if any class/object has attributes that should be treated as static by `jax.jit`, these should be declared at the class level like `_static_attrs = ["foo", "bar"]`. Generally, non-arraylike attributes such as functions, strings etc should be marked static, as well as any attributes used for control flow. Previously this was done automatically, but in a way that caused a lot of performance bugs and unnecessary recompilation. These changes have been implemented for all classes in the `desc` repository, but if you have custom objectives or other local objects that subclass from `desc` you may need to add this yourself. JAX error messages usually do a good job of alerting you to things that need to be static, and feel free to open an issue with `desc` if you have any questions.
 - No longer closes over the field in ``desc.magnetic_fields._core.field_line_integrate``, which can dramatically reduce compile times when the field being traced has large size attributes (for example, when using a ``desc.magnetic_fields._core.SplineMagneticField`` object).
+
 
 v0.14.2
 -------
@@ -398,7 +404,6 @@ Breaking Changes
 - Adds support for Python 3.13 and removes support for 3.9 since new JAX versions require minimum Python 3.10.
 
 
-
 v0.13.0
 -------
 
@@ -423,13 +428,13 @@ New Features
 - Add ``desc.coils.initialize_modular_coils`` and ``desc.coils.initialize_saddle_coils`` for creating an initial guess for stage 2 optimization.
 - Adds ``rotate_zeta`` function to ``desc.compat`` to rotate an ``Equilibrium`` around Z axis.
 
-
 Bug Fixes
 
 - Fixes bug that occurs when taking the gradient of ``root`` and ``root_scalar`` with newer versions of JAX (>=0.4.34) and unpins the JAX version.
 - Changes ``FixLambdaGauge`` constraint to now enforce zero flux surface average for lambda, instead of enforcing lambda(rho,0,0)=0 as it was incorrectly doing before.
 - Fixes bug in ``softmin/softmax`` implementation.
 - Fixes bug that occured when using ``ProximalProjection`` with a scalar optimization algorithm.
+
 
 v0.12.3
 -------
@@ -457,8 +462,6 @@ Bug Fixes
 Deprecations
 
 - ``deriv_mode="looped"`` in ``ObjectiveFunction`` is deprecated and will be removed in a future version in favored of ``deriv_mode="batched"`` with ``jac_chunk_size=1``,
-
-
 
 
 v0.12.2
@@ -635,6 +638,7 @@ Breaking Changes
 - Renames the method for comparing equivalence between DESC objects from `eq` to `equiv`
 to avoid confusion with the common shorthand for `Equilibrium`.
 - Minimum Python version is now 3.9
+
 
 v0.10.4
 -------

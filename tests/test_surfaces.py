@@ -10,7 +10,7 @@ from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
 from desc.geometry.surface import _constant_offset_surface
-from desc.grid import LinearGrid
+from desc.grid import LinearGridFlux, LinearGridToroidalSurface
 from desc.utils import rpz2xyz
 
 
@@ -21,7 +21,7 @@ class TestFourierRZToroidalSurface:
     def test_area(self):
         """Test calculation of surface area."""
         s = FourierRZToroidalSurface()
-        grid = LinearGrid(M=24, N=24)
+        grid = LinearGridToroidalSurface(M=24, N=24)
         area = 4 * np.pi**2 * 10
         np.testing.assert_allclose(s.compute("S", grid=grid)["S"], area)
 
@@ -38,10 +38,10 @@ class TestFourierRZToroidalSurface:
     def test_normal(self):
         """Test calculation of surface normal vector."""
         s = FourierRZToroidalSurface()
-        grid = LinearGrid(theta=np.pi / 2, zeta=np.pi)
+        grid = LinearGridToroidalSurface(theta=np.pi / 2, zeta=np.pi)
         N = s.compute("n_rho", grid=grid)["n_rho"]
         np.testing.assert_allclose(N[0], [0, 0, -1], atol=1e-14)
-        grid = LinearGrid(theta=0.0, zeta=0.0)
+        grid = LinearGridToroidalSurface(theta=0.0, zeta=0.0)
         N = s.compute("n_rho", grid=grid)["n_rho"]
         np.testing.assert_allclose(N[0], [1, 0, 0], atol=1e-12)
 
@@ -130,7 +130,7 @@ class TestFourierRZToroidalSurface:
     def test_curvature(self):
         """Tests for gaussian, mean, principle curvatures."""
         s = FourierRZToroidalSurface()
-        grid = LinearGrid(theta=np.pi / 2, zeta=np.pi)
+        grid = LinearGridToroidalSurface(theta=np.pi / 2, zeta=np.pi)
         data = s.compute(
             [
                 "curvature_K_rho",
@@ -149,7 +149,7 @@ class TestFourierRZToroidalSurface:
     def test_constant_offset_surface_circle(self):
         """Test constant offset algorithm for a circular torus."""
         s = FourierRZToroidalSurface()
-        grid = LinearGrid(M=3, N=2)
+        grid = LinearGridToroidalSurface(M=3, N=2)
         offset = 1
         s_offset, data, _ = s.constant_offset_surface(
             offset, grid, M=1, N=1, full_output=True
@@ -184,7 +184,7 @@ class TestFourierRZToroidalSurface:
             0,
             atol=1e-13,
         )
-        grid_compute = LinearGrid(M=10, N=10)
+        grid_compute = LinearGridToroidalSurface(M=10, N=10)
         data = s.compute(["x", "e_theta", "e_zeta"], basis="rpz", grid=grid_compute)
         data_offset = s_offset.compute(
             ["x", "e_theta", "e_zeta"], basis="rpz", grid=grid_compute
@@ -219,7 +219,7 @@ class TestFourierRZToroidalSurface:
     def test_constant_offset_surface_circle_jax_transformable(self, capsys):
         """Test constant offset algorithm is jax transformable."""
         s = FourierRZToroidalSurface()
-        grid = LinearGrid(M=3, N=2)
+        grid = LinearGridToroidalSurface(M=3, N=2)
         transforms = get_transforms(["R", "Z"], s, grid)
         transforms["R"].build_pinv()
         transforms["Z"].build_pinv()
@@ -331,7 +331,7 @@ class TestFourierRZToroidalSurface:
     def test_position(self):
         """Tests for position on surface."""
         s = FourierRZToroidalSurface()
-        grid = LinearGrid(theta=0, zeta=np.pi)
+        grid = LinearGridToroidalSurface(theta=0, zeta=np.pi)
         data = s.compute(["x", "R", "phi", "Z"], grid=grid, basis="xyz")
         np.testing.assert_allclose(data["R"], 11)
         np.testing.assert_allclose(data["x"][0, 0], -11)
@@ -344,7 +344,9 @@ class TestFourierRZToroidalSurface:
     def test_surface_from_values(self):
         """Test for constructing elliptical surface from values."""
         surface = get("HELIOTRON", "boundary")
-        grid = LinearGrid(M=20, N=20, sym=False, NFP=surface.NFP, endpoint=False)
+        grid = LinearGridToroidalSurface(
+            M=20, N=20, sym=False, NFP=surface.NFP, endpoint=False
+        )
         data = surface.compute(["R", "phi", "Z"], grid=grid)
 
         theta = grid.nodes[:, 1]
@@ -359,7 +361,7 @@ class TestFourierRZToroidalSurface:
             sym=True,
             w=np.ones_like(theta),
         )
-        grid = LinearGrid(M=25, N=25, sym=False, NFP=surface.NFP)
+        grid = LinearGridToroidalSurface(M=25, N=25, sym=False, NFP=surface.NFP)
         np.testing.assert_allclose(
             surface.compute("x", grid=grid)["x"], surface2.compute("x", grid=grid)["x"]
         )
@@ -448,7 +450,7 @@ class TestZernikeRZToroidalSection:
     def test_area(self):
         """Test calculation of surface area."""
         s = ZernikeRZToroidalSection()
-        grid = LinearGrid(L=10, M=10)
+        grid = LinearGridFlux(L=10, M=10)
         area = np.pi * 1**2
         np.testing.assert_allclose(s.compute("A", grid=grid)["A"], area)
 
@@ -456,7 +458,7 @@ class TestZernikeRZToroidalSection:
     def test_normal(self):
         """Test calculation of surface normal vector."""
         s = ZernikeRZToroidalSection()
-        grid = LinearGrid(L=8, M=4, N=0, axis=False)
+        grid = LinearGridFlux(L=8, M=4, N=0, axis=False)
         N = s.compute("n_zeta", grid=grid)["n_zeta"]
         np.testing.assert_allclose(N, np.broadcast_to([0, 1, 0], N.shape), atol=1e-12)
 
@@ -492,7 +494,7 @@ class TestZernikeRZToroidalSection:
         (kind of pointless since it's a flat surface so its always 0)
         """
         s = ZernikeRZToroidalSection()
-        grid = LinearGrid(theta=np.pi / 2, rho=0.5)
+        grid = LinearGridFlux(theta=np.pi / 2, rho=0.5)
         data = s.compute(
             [
                 "curvature_K_zeta",

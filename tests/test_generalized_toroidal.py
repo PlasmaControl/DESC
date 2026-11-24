@@ -788,6 +788,72 @@ def test_area_on_solved_omega_equilibrium(eq_omega):
     assert abs(elong / direct_elong - 1) < 0.05
 
 
+def _eq_with_omega():
+    """Small non-symmetric equilibrium with a nonzero interior omega."""
+    eq = Equilibrium(L=4, M=4, N=2, NFP=3, sym=False, Lw=2, Mw=2, Nw=2)
+    rng = np.random.default_rng(3)
+    eq.W_lmn = 0.02 * rng.standard_normal(eq.W_basis.num_modes)
+    eq.surface = eq.get_surface_at(rho=1)
+    eq.axis = eq.get_axis()
+    return eq
+
+
+def _xyz(eq, rho, theta, zeta):
+    return np.asarray(eq.compute("x", grid=_grid(rho, theta, zeta), basis="xyz")["x"])
+
+
+@pytest.mark.unit
+def test_compat_transformations_with_omega():
+    """Relabelings in desc.compat keep the physical geometry when omega != 0."""
+    from desc.compat import (
+        contract_equilibrium,
+        ensure_positive_jacobian,
+        flip_helicity,
+        flip_theta,
+        rotate_zeta,
+    )
+
+    r, t, z = np.meshgrid(
+        [0.3, 0.7, 1.0], np.linspace(0, 2 * np.pi, 7), np.linspace(0, 2, 5)
+    )
+    r, t, z = r.ravel(), t.ravel(), z.ravel()
+    eq = _eq_with_omega()
+    x = _xyz(eq, r, t, z)
+
+    new = flip_theta(eq.copy())
+    np.testing.assert_allclose(_xyz(new, r, t - np.pi, z), x, atol=1e-12)
+
+    # mirror image phi -> -phi, evaluated at -zeta
+    new = flip_helicity(eq.copy())
+    np.testing.assert_allclose(_xyz(new, r, t, -z), x * [1, -1, 1], atol=1e-12)
+
+    angle = 0.4
+    new = rotate_zeta(eq, angle, copy=True)
+    c, s = np.cos(angle), np.sin(angle)
+    rot = np.array([[c, s, 0], [-s, c, 0], [0, 0, 1]])
+    np.testing.assert_allclose(_xyz(new, r, t, z - angle), x @ rot.T, atol=1e-12)
+
+    # a left handed copy (theta -> -theta) is restored to the original
+    left = eq.copy()
+    for name, flip in [("R", "m<0"), ("Z", "m<0"), ("L", "m>=0"), ("W", "m<0")]:
+        m = getattr(left, name + "_basis").modes[:, 1]
+        sign = np.where(m < 0 if flip == "m<0" else m >= 0, -1, 1)
+        setattr(left, name + "_lmn", getattr(left, name + "_lmn") * sign)
+    if left.iota is None:
+        left.c_l = -left.c_l
+    else:
+        left.i_l = -left.i_l
+    np.testing.assert_allclose(_xyz(left, r, -t, z), x, atol=1e-12)
+    with pytest.warns(UserWarning, match="Left handed"):
+        ensure_positive_jacobian(left)
+    for name in ["R_lmn", "Z_lmn", "L_lmn", "W_lmn"]:
+        np.testing.assert_allclose(getattr(left, name), getattr(eq, name), atol=1e-14)
+
+    inner = 0.6
+    new = contract_equilibrium(eq, inner, copy=True)
+    np.testing.assert_allclose(_xyz(new, r, t, z), _xyz(eq, inner * r, t, z), atol=1e-9)
+
+
 class TestPlottingWithOmega:
     """Constant-phi plots on an equilibrium whose zeta is not phi.
 

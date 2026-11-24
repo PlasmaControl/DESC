@@ -68,6 +68,11 @@ def ensure_positive_jacobian(eq):
         lone[eq.L_basis.modes[:, 1] >= 0] *= -1
         eq.L_lmn *= lone
 
+        # φ = ζ + ω is unchanged by θ → −θ, so ω(θ, ζ) → ω(−θ, ζ) like R
+        wone = np.ones_like(eq.W_lmn)
+        wone[eq.W_basis.modes[:, 1] < 0] *= -1
+        eq.W_lmn = eq.W_lmn * wone
+
         eq.axis = eq.get_axis()
         eq.surface = eq.get_surface_at(rho=1)
 
@@ -115,6 +120,12 @@ def flip_helicity(eq):
     lone[eq.L_basis.modes[:, 2] < 0] *= -1
     eq.L_lmn *= lone
 
+    # The new equilibrium is the mirror image ϕ → −ϕ of the old one evaluated at
+    # −ζ, so ζ + ω_new(θ, ζ) = −(−ζ + ω(θ, −ζ)), i.e. ω_new(θ, ζ) = −ω(θ, −ζ).
+    wone = -np.ones_like(eq.W_lmn)
+    wone[eq.W_basis.modes[:, 2] < 0] *= -1
+    eq.W_lmn = eq.W_lmn * wone
+
     eq.axis = eq.get_axis()
     eq.surface = eq.get_surface_at(rho=1)
 
@@ -154,6 +165,10 @@ def flip_theta(eq):
     lone = np.ones_like(eq.L_lmn)
     lone[eq.L_basis.modes[:, 1] % 2 == 1] *= -1
     eq.L_lmn *= lone
+
+    wone = np.ones_like(eq.W_lmn)
+    wone[eq.W_basis.modes[:, 1] % 2 == 1] *= -1
+    eq.W_lmn = eq.W_lmn * wone
 
     eq.axis = eq.get_axis()
     eq.surface = eq.get_surface_at(rho=1)
@@ -324,8 +339,11 @@ def rotate_zeta(eq, angle, copy=False):
         elif fun == "L":
             f_lmn = np.array(eq_rotated.L_lmn)
             basis = eq_rotated.L_basis
+        elif fun == "W":
+            f_lmn = np.array(eq_rotated.W_lmn)
+            basis = eq_rotated.W_basis
         else:
-            raise ValueError("fun must be 'R', 'Z' or 'L'")
+            raise ValueError("fun must be 'R', 'Z', 'L' or 'W'")
 
         new_coeffs = f_lmn.copy()
         for i, (l, m, n) in enumerate(basis.modes):
@@ -342,6 +360,8 @@ def rotate_zeta(eq, angle, copy=False):
     eq_rotated.R_lmn = _get_new_coeffs(fun="R")
     eq_rotated.Z_lmn = _get_new_coeffs(fun="Z")
     eq_rotated.L_lmn = _get_new_coeffs(fun="L")
+    # φ = ζ + ω, so the rotation shifts ω in ζ exactly as it shifts R, Z and λ
+    eq_rotated.W_lmn = _get_new_coeffs(fun="W")
 
     eq_rotated.surface = eq_rotated.get_surface_at(rho=1.0)
     eq_rotated.axis = eq_rotated.get_axis()
@@ -462,6 +482,9 @@ def contract_equilibrium(
         M_grid=eq.M_grid,
         N_grid=eq.N_grid,
         sym=eq.sym,
+        Lw=eq.Lw,
+        Mw=eq.Mw,
+        Nw=eq.Nw,
         ensure_nested=False,  # we fit the surfaces later so don't check now
     )
     inner_grid = LinearGrid(
@@ -471,9 +494,18 @@ def contract_equilibrium(
         NFP=eq.NFP,
         axis=True,
     )
-    inner_data = eq.compute(["R", "Z", "lambda"], grid=inner_grid)
+    inner_data = eq.compute(["R", "Z", "lambda", "omega"], grid=inner_grid)
     nodes = inner_grid.nodes
     nodes[:, 0] = nodes[:, 0] / inner_rho
+    # The R, Z, lambda values are given at the toroidal coordinate zeta of eq, so
+    # the inner equilibrium must use the same toroidal angle, ie the same omega
+    # rescaled in rho, for those values to describe the same physical points.
+    if eq_inner.W_basis.num_modes:
+        from .equilibrium.initial_guess import _initial_guess_points
+
+        eq_inner.W_lmn = _initial_guess_points(
+            nodes, inner_data["omega"], eq_inner.W_basis
+        )
     eq_inner.set_initial_guess(
         nodes, inner_data["R"], inner_data["Z"], inner_data["lambda"]
     )

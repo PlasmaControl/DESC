@@ -1,14 +1,6 @@
 Changelog
 =========
 
-Bug Fixes
-
-- Fixes ``perturb`` with NumPy array weights and with 2D weight matrices.
-
-
-v0.17.4
--------
-
 New Features
 
 - Restructures the grid classes to allow for new grids in different coordinate systems besides flux coordinates. The old grid classes are aliased to the new grids of type ``AbstractGridFlux`` and are backwards compatible with the new API. ``Curve`` objects now expect a compute grid of type ``AbstractGridCurve``, and ``FourierRZToroidalSurface`` objects now expect a compute grid of type ``AbstractGridToroidalSurface``.
@@ -17,6 +9,10 @@ Breaking Changes and Deprecations
 
 - ``Curve`` and ``FourierRZToroidalSurface`` objects now expect grids of type ``AbstractGridCurve`` and ``AbstractGridToroidalSurface``, respectively. Their support for grids of type ``AbstractGridFlux`` is deprecated and will be removed in a future release.
 - The unused x0 and x1 coordinates for ``AbstractGridToroidalSurface`` and ``AbstractGridCurve`` grids now have values of 0. The previous default was ``rho=1.0`` for 1D and 2D grids.
+
+Bug Fixes
+
+- Fixes ``perturb`` with NumPy array weights and with 2D weight matrices.
 
 
 v0.17.4

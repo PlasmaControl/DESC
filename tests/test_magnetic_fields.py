@@ -1254,6 +1254,29 @@ class TestMagneticFields:
         np.testing.assert_allclose(e_fine, max_err(65, 4, "cubic"), rtol=1e-3)
 
     @pytest.mark.unit
+    def test_spline_field_periodic_phi(self):
+        """Test spline field accuracy across the phi wrap, for gh issue #2436."""
+        NFP = 5
+        R = np.linspace(0.5, 1.5, 6)
+        Z = np.linspace(-0.5, 0.5, 6)
+        phi = np.linspace(0, 2 * np.pi / NFP, 48, endpoint=False)
+
+        def f(r, p, z):
+            return r * np.cos(NFP * p + 0.7) + z * np.sin(2 * NFP * p) + 0.5
+
+        B = f(*np.meshgrid(R, phi, Z, indexing="ij"))
+        field = SplineMagneticField(R, phi, Z, B, B, B, NFP=NFP)
+        mid = phi + np.pi / NFP / phi.size
+        rr, pp, zz = np.meshgrid(R[2:4], mid, Z[2:4], indexing="ij")
+        pts = np.stack([rr.ravel(), pp.ravel(), zz.ravel()], axis=1)
+        out = np.asarray(field.compute_magnetic_field(pts))
+        err = np.abs(out - f(*pts.T)[:, None]).max(axis=1)
+        err = err.reshape(rr.shape).transpose(1, 0, 2).reshape(phi.size, -1).max(1)
+        wrap = [0, -2, -1]
+        interior = np.delete(err, [0, phi.size - 2, phi.size - 1])
+        assert err[wrap].max() < 3 * interior.max()
+
+    @pytest.mark.unit
     def test_field_line_integrate(self, caplog):
         """Test field line integration."""
         # q=4, field line should rotate 1/4 turn after 1 toroidal transit

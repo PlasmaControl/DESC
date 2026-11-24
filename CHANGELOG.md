@@ -14,6 +14,7 @@ New Features
 - Adds ``desc.external.agni.AgniStability``, the squared growth rate of the most unstable finite-n ideal MHD mode computed by the external AGNI solver (``pip install agnimhd``), with its gradient for optimization.
 - Added warning for when ``deriv_mode="batched"`` is used in an ``ObjectiveFunction`` where one or more sub-objectives is using ``rev`` mode differentiation. Also adds more info about the derivative mode and Jacobian chunk sizes when building the objective with ``verbose>1``.
 - Adds ``scale_invariant`` argument to quasi-symmetry objectives (i.e. ``QuasisymmetryTwoTerm``, ``QuasisymmetryTripleProduct`` and ``QuasisymmetryBoozer``) that introduces the normalized alternatives for the objective functions with the actual evaluated local magnetic field information instead of the precomputed constant normalization. Similarly, the definition of `f_C` and `f_T` of `plot_qs_error` is changed, the flux surface average is now take over the normalized quantity whereas previously the flux surface average was applied to each term separately before normalization. For more details on these quantities, see [Basic Optimization tutorial](https://desc-docs.readthedocs.io/en/latest/notebooks/tutorials/basic_optimization.html).
+- Added the pure JAX package [`nufftax`](https://github.com/GragasLab/nufftax) as a fallback for NUFFTs. `jax-finufft` remains a requirement and is used whenever it can be imported, with unchanged behavior and defaults. If `jax-finufft` is not installed or fails to load, DESC uses `nufftax`, with a default `nufft_eps` of `1e-8` for `GammaC`, `EffectiveRipple` and the corresponding compute quantities, since `nufftax` needs a tighter tolerance than `jax-finufft` for comparable accuracy. `nufftax` requires Python >= 3.11.
 - Adds ``NeutronWallLoading`` objective to compute the neutron wall loading (MW/m²) on a chosen/optimized surface.
 - Adds Python type hints for many API functions. Allows for better autocomplete and error checking when writing DESC scripts in common IDEs.
 
@@ -36,6 +37,7 @@ Performance Improvements
 
 Breaking Changes and Deprecations
 
+- Python 3.10 is no longer supported. DESC now requires Python >= 3.11, which is needed by `nufftax`.
 - The parameter ``num_transit`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` and related functions has been changed to ``field_period_transits``. This should make using a consistent resolution across different equilibria easier. The now-deprecated ``num_transit`` may still be used but note the equivalence ``field_period_transits = num_transit * grid.NFP``.
 - The parameter ``Y_B`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` is now the resolution over a single field period rather than a full toroidal transit. This should make using a consistent resolution across different equilibria easier.
 - Objectives using ``Bounce2D`` now do not support fwd mode differentiation for JAX versions <0.11.0.

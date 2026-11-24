@@ -2,8 +2,8 @@
 
 import pickle
 import warnings
+from importlib.metadata import version
 
-import jax_finufft
 import numpy as np
 import pytest
 from packaging.version import Version
@@ -28,6 +28,7 @@ from desc.geometry import (
 )
 from desc.grid import Grid, LinearGrid
 from desc.integrals import Bounce2D
+from desc.integrals._interp_utils import NUFFT_BACKEND
 from desc.magnetic_fields import (
     CurrentPotentialField,
     FourierCurrentPotentialField,
@@ -35,7 +36,10 @@ from desc.magnetic_fields import (
 )
 from desc.utils import ResolutionWarning, apply, errorif, xyz2rpz, xyz2rpz_vec
 
-OLD_FINUFFT = Version(jax_finufft.__version__) <= Version("1.2.0")
+NUFFTAX = NUFFT_BACKEND == "nufftax"
+OLD_FINUFFT = NUFFT_BACKEND == "jax-finufft" and Version(
+    version("jax-finufft")
+) <= Version("1.2.0")
 
 
 def _compare_against_master(
@@ -49,8 +53,10 @@ def _compare_against_master(
             else:
                 mean = np.mean(np.atleast_1d(np.abs(master_data[p][name])))
             try:
-                rtol = 1e-5 if "Gamma_" in name and OLD_FINUFFT else 1e-8
-                atol = 1e-4 if "Gamma_" in name and OLD_FINUFFT else 1e-8
+                # reference data for NUFFT quantities is computed with jax-finufft
+                uses_approximate_gamma = "Gamma_" in name and (NUFFTAX or OLD_FINUFFT)
+                rtol = 1e-5 if uses_approximate_gamma else 1e-8
+                atol = 1e-4 if uses_approximate_gamma else 1e-8
                 atol = atol * mean + 1e-9  # add 1e-9 for basically-zero things
                 err_msg = f"Parameterization: {p}. Name: {name}."
                 assert np.isfinite(mean).all(), err_msg
@@ -83,7 +89,7 @@ def _compare_against_rpz(p, data, data_rpz, coordinate_conversion_func):
         if data_index[p][name]["dim"] != 3:
             continue
         res = coordinate_conversion_func(data, name) - data_rpz[name]
-        rtol = 1e-4 if "Gamma_" in name and OLD_FINUFFT else 1e-8
+        rtol = 1e-8
         atol = 1e-8
         errorif(
             not np.all(

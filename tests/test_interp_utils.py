@@ -9,6 +9,7 @@ from matplotlib.colors import LogNorm
 from numpy.polynomial.polynomial import polyvander
 from tests.test_plotting import tol_2d
 
+import desc.integrals._interp_utils as _interp_utils
 from desc.backend import jnp, rfft, rfft2
 from desc.examples import get
 from desc.integrals import Bounce2D
@@ -89,6 +90,12 @@ _test_inputs_2D = [
 class TestFastInterp:
     """Test fast (non-uniform) FFT and partial sum interpolation."""
 
+    @pytest.fixture(autouse=True, params=["jax-finufft", "nufftax"])
+    def nufft_backend(self, request, monkeypatch):
+        """Run each test with both NUFFT libraries."""
+        pytest.importorskip(request.param.replace("-", "_"))
+        monkeypatch.setattr(_interp_utils, "NUFFT_BACKEND", request.param)
+
     @pytest.mark.unit
     @pytest.mark.parametrize("func, n, domain", _test_inputs_1D)
     def test_non_uniform_real_FFT(self, func, n, domain):
@@ -99,11 +106,11 @@ class TestFastInterp:
 
         f = 2 * rfft(c, norm="forward")
         f = f.at[..., (0, -1) if (n % 2 == 0) else 0].divide(2)
-        np.testing.assert_allclose(nufft1d2r(xq, f, domain), func(xq))
+        np.testing.assert_allclose(nufft1d2r(xq, f, domain, eps=1e-8), func(xq))
 
         @grad
         def g(xq):
-            return nufft1d2r(xq, f, domain, eps=1e-7).sum()
+            return nufft1d2r(xq, f, domain, eps=1e-8).sum()
 
         @grad
         def true_g(xq):
@@ -165,7 +172,7 @@ class TestFastInterp:
         # multiple (2) fourier series evaluated at the same (3) points
         xq = np.array([7.34, 1.10134, 2.28])
         np.testing.assert_allclose(
-            nufft1d2r(xq, f, domain),
+            nufft1d2r(xq, f, domain, eps=1e-8),
             np.stack([func_2(xq), func_2(xq)]),
         )
 

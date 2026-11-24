@@ -29,6 +29,10 @@ from desc.utils import (
 from .linear_objectives import _FixedObjective
 from .objective_funs import _Objective, collect_docs
 
+# Quantities that depend on only one of the coordinates (rho, theta, zeta), keyed by
+# their ``coordinates`` in ``data_index``, and the surface label that ``Grid`` uses.
+_SURFACE_LABELS = {"r": "rho", "t": "poloidal", "z": "zeta"}
+
 
 class ExternalObjective(_Objective):
     """Wrap an external code.
@@ -220,6 +224,9 @@ class GenericObjective(_Objective):
     (like "mirror ratio"), ``GenericObjective`` will detect this and only return
     the unique values, one per flux surface, instead of the values corresponding to
     every node of the passed-in grid (which may be 3-D as explained above).
+    Likewise, a quantity that is only a function of the poloidal angle theta
+    (like "theta") or only a function of the toroidal angle zeta (like "A(z)")
+    returns one value per unique theta or zeta value of the grid.
 
     Finally, this objective is intended for quantities computed in native DESC flux
     coordinates (rho, theta, zeta). For quantities which require more complicated
@@ -326,8 +333,10 @@ class GenericObjective(_Objective):
 
         if data_index[self._p][self.f]["dim"] == 0:
             self._dim_f = 1
-        elif data_index[self._p][self.f]["coordinates"] == "r":
-            self._dim_f = grid.num_rho
+        elif self._coordinates in _SURFACE_LABELS:
+            # constant on the other two coordinates, so only the unique values remain
+            label = _SURFACE_LABELS[self._coordinates]
+            self._dim_f = getattr(grid, f"num_{label}")
         else:
             self._dim_f = grid.num_nodes * np.prod(data_index[self._p][self.f]["dim"])
         profiles = get_profiles(self.f, obj=thing, grid=grid)
@@ -367,8 +376,9 @@ class GenericObjective(_Objective):
             **self._compute_kwargs,
         )
         f = data[self.f]
-        if self._coordinates == "r":
-            f = constants["transforms"]["grid"].compress(f, surface_label="rho")
+        if self._coordinates in _SURFACE_LABELS:
+            grid = constants["transforms"]["grid"]
+            f = grid.compress(f, surface_label=_SURFACE_LABELS[self._coordinates])
         return f.flatten(order="F")  # so that default quad weights line up correctly.
 
 

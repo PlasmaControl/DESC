@@ -576,15 +576,15 @@ def _project_x_scale_linear(x_scale, things, objective):
         # The fixed (nonzero) scales are already included in the D matrix of the
         # projection, so the optimizer only needs to know which of the reduced
         # variables to scale adaptively (0) and which not to scale further (1).
-        # The columns of Z have unit norm, so the sum below is the fraction of each
-        # reduced variable that lies on variables with a fixed scale. A reduced
+        # The feasible tangents are D @ Z with zero rows for the fixed parameters,
+        # and the columns of Z have unit norm, so the sum below is the fraction of
+        # each reduced variable that lies on variables with a fixed scale. A reduced
         # variable is only adaptive if that is zero, up to round-off in Z.
-        Z = objective._Z
+        Z = objective._feasible_tangents / objective._D[:, None]
         x_scale = jnp.broadcast_to(x_scale, objective._objective.dim_x)
-        has_fixed_scale = x_scale[objective._unfixed_idx] != 0
+        has_fixed_scale = x_scale != 0
         fixed_weight = (Z**2 * has_fixed_scale[:, None]).sum(axis=0)
         x_scale = jnp.where(fixed_weight > np.finfo(Z.dtype).eps * max(Z.shape), 1, 0)
-
     return x_scale
 
 

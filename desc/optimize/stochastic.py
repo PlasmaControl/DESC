@@ -265,6 +265,7 @@ def sgd(  # noqa: C901
             maxiter,
             nfev,
             jnp.inf,
+            False,
         )
         if success is not None:
             break

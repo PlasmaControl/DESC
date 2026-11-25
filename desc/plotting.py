@@ -2762,6 +2762,209 @@ def plot_comparison(
     return fig, ax
 
 
+def plot_dipoles(dipoles, fig=None, return_data=False, **kwargs):
+    """Create 3D plot of permanent-magnet dipole positions.
+
+    Parameters
+    ----------
+    dipoles : DipoleSet
+        Collection of magnetic dipoles to plot.
+    fig : plotly.graph_objs._figure.Figure, optional
+        Existing figure to plot on. If None, creates a new figure.
+    return_data : bool
+        If True, return the plotted data along with the figure.
+    **kwargs : dict, optional
+        Specify properties of the figure, axis, and plot appearance.
+
+        Valid keyword arguments are:
+
+        * ``unique``: bool, only plot stored dipoles if True.
+          Otherwise, include field-period and stellarator symmetry.
+          False by default.
+        * ``figsize``: tuple of length 2, figure size in inches.
+        * ``size``: float, marker size. Default is 2.
+        * ``opacity``: float, marker opacity. Default is 0.85.
+        * ``threshold``: float, minimum absolute value of rho_tilde
+          for a dipole to be displayed. Default is 0.5.
+        * ``color_positive``: str, color of positive dipoles.
+          Default is red.
+        * ``color_negative``: str, color of negative dipoles.
+          Default is blue.
+        * ``showgrid``: bool, whether to show coordinate grid lines.
+          True by default.
+        * ``showticklabels``: bool, whether to show coordinate ticks.
+          True by default.
+        * ``showaxislabels``: bool, whether to show coordinate labels.
+          True by default.
+        * ``zeroline``: bool, whether to show zero coordinate lines.
+          True by default.
+
+    Returns
+    -------
+    fig : plotly.graph_objs._figure.Figure
+        Figure containing the plotted dipoles.
+    plot_data : dict
+        Dictionary containing plotted X, Y, Z, and rho_tilde arrays.
+        Only returned if ``return_data=True``.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from desc.plotting import plot_dipoles
+
+        fig = plot_dipoles(dipoles, threshold=0.5)
+        fig.show()
+
+        # Overlay with coils
+        fig = plot_coils(coilset)
+        fig = plot_dipoles(dipoles, fig=fig)
+        fig.show()
+
+    """
+    from desc.dipole import DipoleSet
+
+    size = kwargs.pop("size", 2)
+    opacity = kwargs.pop("opacity", 0.85)
+    figsize = kwargs.pop("figsize", (10, 10))
+    threshold = kwargs.pop("threshold", 0.5)
+    unique = kwargs.pop("unique", False)
+
+    color_positive = kwargs.pop("color_positive", "#D20000")
+    color_negative = kwargs.pop("color_negative", "#004BE2")
+
+    showgrid = kwargs.pop("showgrid", True)
+    zeroline = kwargs.pop("zeroline", True)
+    showticklabels = kwargs.pop("showticklabels", True)
+    showaxislabels = kwargs.pop("showaxislabels", True)
+
+    errorif(
+        len(kwargs) != 0,
+        msg=f"plot_dipoles got unexpected keyword argument: {kwargs.keys()}",
+    )
+    errorif(
+        not isinstance(dipoles, DipoleSet),
+        ValueError,
+        "Expected `dipoles` to be a DipoleSet, " f"instead got {type(dipoles)}",
+    )
+
+    # Unique dipole positions and normalized strengths
+    X = np.asarray(dipoles.X)
+    Y = np.asarray(dipoles.Y)
+    Z = np.asarray(dipoles.Z)
+    rho = np.asarray(dipoles.rho_tilde)
+
+    # Filter out weak or inactive dipoles
+    active = np.abs(rho) > threshold
+
+    X = X[active]
+    Y = Y[active]
+    Z = Z[active]
+    rho = rho[active]
+
+    plot_data = {
+        "X": [],
+        "Y": [],
+        "Z": [],
+        "rho_tilde": [],
+    }
+
+    if fig is None:
+        fig = go.Figure()
+
+    def add_dipoles(x, y, z, strengths):
+        """Add positive and negative dipoles as separate traces."""
+        for mask, color in [
+            (strengths > 0, color_positive),
+            (strengths < 0, color_negative),
+        ]:
+            if not np.any(mask):
+                continue
+
+            fig.add_trace(
+                go.Scatter3d(
+                    x=x[mask],
+                    y=y[mask],
+                    z=z[mask],
+                    mode="markers",
+                    marker=dict(
+                        color=color,
+                        size=size,
+                        opacity=opacity,
+                    ),
+                    showlegend=False,
+                    hoverinfo="skip",
+                )
+            )
+
+        plot_data["X"].append(x)
+        plot_data["Y"].append(y)
+        plot_data["Z"].append(z)
+        plot_data["rho_tilde"].append(strengths)
+
+    if unique:
+        add_dipoles(X, Y, Z, rho)
+
+    else:
+        if dipoles.sym:
+            angle_ref = 2 * np.pi / dipoles.NFP
+            cr = np.cos(angle_ref)
+            sr = np.sin(angle_ref)
+
+            X_sym = cr * X + sr * Y
+            Y_sym = sr * X - cr * Y
+            Z_sym = -Z
+
+        for k in range(dipoles.NFP):
+            angle = 2 * np.pi * k / dipoles.NFP
+            c = np.cos(angle)
+            s = np.sin(angle)
+
+            Xk = c * X - s * Y
+            Yk = s * X + c * Y
+
+            add_dipoles(Xk, Yk, Z, rho)
+
+            if dipoles.sym:
+                Xsk = c * X_sym - s * Y_sym
+                Ysk = s * X_sym + c * Y_sym
+
+                add_dipoles(Xsk, Ysk, Z_sym, rho)
+
+    xaxis_title = "X (m)" if showaxislabels else ""
+    yaxis_title = "Y (m)" if showaxislabels else ""
+    zaxis_title = "Z (m)" if showaxislabels else ""
+
+    axis_options = dict(
+        backgroundcolor="white",
+        gridcolor="darkgrey",
+        showbackground=False,
+        zerolinecolor="darkgrey",
+        showgrid=showgrid,
+        zeroline=zeroline,
+        showticklabels=showticklabels,
+    )
+
+    fig.update_layout(
+        scene=dict(
+            xaxis_title=xaxis_title,
+            yaxis_title=yaxis_title,
+            zaxis_title=zaxis_title,
+            xaxis=axis_options.copy(),
+            yaxis=axis_options.copy(),
+            zaxis=axis_options.copy(),
+            aspectmode="data",
+        ),
+        width=figsize[0] * dpi,
+        height=figsize[1] * dpi,
+    )
+
+    if return_data:
+        return fig, plot_data
+
+    return fig
+
+
 def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
     """Create 3D plot of coil geometry.
 

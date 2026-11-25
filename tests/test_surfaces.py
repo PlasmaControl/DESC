@@ -10,8 +10,47 @@ from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
 from desc.geometry.surface import _constant_offset_surface
-from desc.grid import LinearGrid
+from desc.grid import Grid, LinearGrid
 from desc.utils import rpz2xyz
+
+
+def _warped_samples(NFP, omega):
+    """Structured mesh of points sampled from a known surface at warped angles.
+
+    Returns the (nt, nz, 3) cylindrical coordinates, the unwarped angles the points
+    are nominally at, and the surface.
+    """
+    surf = FourierRZToroidalSurface(
+        R_lmn=[10, 1, 0.2, 0.15, 0.05],
+        modes_R=[[0, 0], [1, 0], [1, 1], [2, 1], [3, 2]],
+        Z_lmn=[-1, 0.2, 0.1, 0.05],
+        modes_Z=[[-1, 0], [-1, 1], [-2, 1], [-3, -2]],
+        W_lmn=[0.05, 0.02] if omega else None,
+        modes_W=[[1, -1], [-1, 1]] if omega else None,
+        NFP=NFP,
+        sym=False,
+    )
+    nt, nz = 24, 20
+    u = np.linspace(0, 2 * np.pi, nt, endpoint=False)
+    v = np.linspace(0, 2 * np.pi / NFP, nz, endpoint=False)
+    uu, vv = np.meshgrid(u, v, indexing="ij")
+    tt = uu + 0.3 * (
+        np.sin(uu) + 0.5 * np.sin(2 * uu + 1) + 0.3 * np.sin(uu - NFP * vv)
+    )
+    zz = vv + (0.1 / NFP) * (0.6 * np.sin(NFP * vv) + 0.3 * np.sin(NFP * vv + uu))
+    if not omega:
+        # without omega zeta is the cylindrical angle, so only theta can be warped
+        zz = vv
+    grid = Grid(np.stack([np.ones(tt.size), tt.ravel(), zz.ravel()], -1), sort=False)
+    data = surf.compute(["R", "phi", "Z"], grid=grid)
+    coords = np.stack([data["R"], data["phi"], data["Z"]], -1).reshape(nt, nz, 3)
+    return coords, uu, vv, surf
+
+
+def _area_volume(surf):
+    """Area and volume on a grid fine enough that quadrature error is negligible."""
+    data = surf.compute(["S", "V"], grid=LinearGrid(M=32, N=32, NFP=surf.NFP))
+    return data["S"], data["V"]
 
 
 class TestFourierRZToroidalSurface:
@@ -395,6 +434,58 @@ class TestFourierRZToroidalSurface:
                 NFP=surface.NFP,
                 sym=True,
             )
+
+    @pytest.mark.unit
+    def test_surface_from_values_optimize(self):
+        """Test that optimizing the angles recovers a surface sampled at warped ones."""
+        NFP = 3
+        coords, uu, vv, surf = _warped_samples(NFP, omega=True)
+        kw = dict(M=surf.M, N=surf.N, NFP=NFP, sym=False)
+        plain = FourierRZToroidalSurface.from_values(coords, uu, zeta=vv, **kw)
+        opt = FourierRZToroidalSurface.from_values(
+            coords, uu, zeta=vv, optimize=True, **kw
+        )
+        # area and volume don't depend on the parameterization, so the optimized
+        # fit reproduces them exactly while the fit at the warped angles cannot
+        S, V = _area_volume(surf)
+        np.testing.assert_allclose(_area_volume(opt)[0], S, rtol=1e-10)
+        np.testing.assert_allclose(_area_volume(opt)[1], V, rtol=1e-10)
+        assert abs(_area_volume(plain)[1] - V) > 1e-5 * V
+
+        # a corrupted point with zero weight has no effect on the fit
+        bad = coords.copy()
+        bad[3, 4, 0] += 0.5
+        w = np.ones(coords.shape[:-1])
+        w[3, 4] = 0
+        opt = FourierRZToroidalSurface.from_values(
+            bad, uu, zeta=vv, optimize=True, w=w, **kw
+        )
+        np.testing.assert_allclose(_area_volume(opt)[0], S, rtol=1e-10)
+        np.testing.assert_allclose(_area_volume(opt)[1], V, rtol=1e-10)
+
+        # without omega only theta is optimized, starting from rule based labels
+        coords, _, _, surf = _warped_samples(NFP, omega=False)
+        opt = FourierRZToroidalSurface.from_values(
+            coords, "curvature", optimize=True, **kw
+        )
+        assert opt.W_basis.num_modes == 0
+        S, V = _area_volume(surf)
+        np.testing.assert_allclose(_area_volume(opt)[0], S, rtol=1e-10)
+        np.testing.assert_allclose(_area_volume(opt)[1], V, rtol=1e-10)
+
+    @pytest.mark.unit
+    def test_condense_spectrum(self):
+        """Test that condensing a high resolution fit recovers the low resolution."""
+        NFP = 3
+        coords, uu, vv, surf = _warped_samples(NFP, omega=True)
+        big = FourierRZToroidalSurface.from_values(
+            coords, uu, zeta=vv, M=8, N=6, NFP=NFP, sym=False
+        )
+        small = big.condense_spectrum(tol=1e-3, verbose=0)
+        assert small.M <= surf.M and small.N <= surf.N
+        S, V = _area_volume(surf)
+        np.testing.assert_allclose(_area_volume(small)[0], S, rtol=1e-3)
+        np.testing.assert_allclose(_area_volume(small)[1], V, rtol=1e-3)
 
     @pytest.mark.unit
     def test_surface_from_shape_parameters(self):

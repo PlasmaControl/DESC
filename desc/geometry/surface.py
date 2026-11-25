@@ -25,6 +25,19 @@ from desc.utils import (
     xyz2rpz_vec,
 )
 
+from ._surface_fit import (
+    _check_determined,
+    _check_label_order,
+    _condense,
+    _distance,
+    _fourier_bases,
+    _mean_minor_radius,
+    _optimize_labels,
+    _prepare_data,
+    _report,
+    _unpack,
+    initial_labels,
+)
 from .core import Surface
 
 __all__ = ["FourierRZToroidalSurface", "ZernikeRZToroidalSection"]
@@ -575,6 +588,12 @@ class FourierRZToroidalSurface(Surface):
         Mw=None,
         Nw=None,
         basis="rpz",
+        optimize=False,
+        maxiter=100,
+        ftol=1e-4,
+        tol=0.0,
+        omega_modes="all",
+        verbose=0,
     ):
         """Create a surface from given real space coordinates.
 
@@ -592,23 +611,42 @@ class FourierRZToroidalSurface(Surface):
         provided phi - zeta is a single valued periodic function with
         ``d(phi)/d(zeta) > 0`` (checked after fitting).
 
+        With ``optimize=True`` the given ``theta`` and ``zeta`` are only a starting
+        point: the angle of every point is solved for jointly with the Fourier
+        coefficients to minimize the distance from the points to the surface. A
+        surface's spectrum depends on its parameterization, so this can fit a given
+        resolution far more accurately than fixed angles do. If ``zeta`` is None,
+        omega is zero and zeta = phi is held fixed, so only theta is optimized.
+
         Parameters
         ----------
-        coords : array-like shape(num_points,3) or Grid
+        coords : array-like shape(num_points,3) or shape(nt,nz,3)
             coordinates to fit as a FourierRZToroidalSurface. Cylindrical
             coordinates (R,phi,Z) if ``basis="rpz"`` (default), Cartesian
-            coordinates (X,Y,Z) if ``basis="xyz"``.
-        theta : ndarray, shape(num_points,)
+            coordinates (X,Y,Z) if ``basis="xyz"``. May be given as a structured
+            mesh of shape (nt,nz,3), where the first axis runs poloidally around
+            the surface and the second toroidally over a whole number of field
+            periods, without repeated endpoints. A structured mesh is required when
+            ``theta`` or ``zeta`` is given as a rule name.
+        theta : ndarray, shape(num_points,) or shape(nt,nz), or str
             Locations in poloidal angle theta where real space coordinates are given.
-            Expects same number of angles as coords (num_points),
+            Expects same number of angles as coords (num_points), in the same order
+            if coords is a structured mesh.
             This determines the poloidal angle for the resulting surface.
-        zeta : ndarray, shape(num_points,)
+            Alternatively the name of a rule to construct them from a structured mesh,
+            one of "curvature" (usually best), "chordal", "centripetal", "uniform".
+        zeta : ndarray, shape(num_points,) or shape(nt,nz), or str
             Locations in toroidal angle zeta where real space coordinates are given.
-            Expects same number of angles as coords (num_points),
+            Expects same number of angles as coords (num_points), in the same order
+            if coords is a structured mesh.
             This determines the toroidal angle for the resulting surface.
             if None, defaults to assuming the toroidal angle is the cylindrical phi
             and so sets zeta = phi = coords[:,1], in which case omega = 0
             identically and no omega modes are created.
+            Alternatively the name of a rule to construct them from a structured mesh,
+            one of "phi", "curvature", "chordal", "centripetal", "uniform". "phi"
+            starts from zeta = phi, and the others space zeta along the curve of cross
+            section centroids.
         M : int
             poloidal resolution of basis used to fit surface with.
             It is recommended to fit with M < num_theta points per toroidal plane,
@@ -627,16 +665,38 @@ class FourierRZToroidalSurface(Surface):
             Relative condition number of the fit. Singular values smaller than this
             relative to the largest singular value will be ignored. The default value
             is len(x)*eps, where eps is the relative precision of the float type, about
-            2e-16 in most cases.
-        w : array-like, shape(num_points,)
+            2e-16 in most cases. Not used when ``optimize=True``.
+        w : array-like, shape(num_points,) or shape(nt,nz)
             Weights to apply to the sample coordinates. For gaussian
-            uncertainties, use 1/sigma (not 1/sigma**2).
+            uncertainties, use 1/sigma (not 1/sigma**2). With ``optimize=True``
+            each point's distance to the surface is weighted.
         Mw, Nw : int
             poloidal and toroidal resolution of the basis used to fit omega.
             Ignored when ``zeta`` is None. Default to M and N respectively.
         basis : {"rpz", "xyz"}
             basis of the given coords: cylindrical (R,phi,Z) or
             Cartesian (X,Y,Z).
+        optimize : bool
+            Whether to solve for the angles of the points along with the
+            coefficients, starting from the given ``theta`` and ``zeta``.
+        maxiter : int
+            Maximum number of iterations when ``optimize=True``.
+        ftol : float
+            When ``optimize=True``, stop once the (weighted) sum of squared distances
+            falls by less than this fraction in one iteration.
+        tol : float
+            When ``optimize=True``, stop once the rms distance from the points to the
+            surface is at most this, in the units of ``coords``. The default of 0
+            iterates until ``ftol`` or ``maxiter`` is reached.
+        omega_modes : {"all", "no_m0", "no_n0", "mixed"}
+            Which omega modes to fit when ``optimize=True``. "all" fits every mode
+            except (0,0), which is a rigid toroidal rotation. "no_m0" also leaves out
+            modes independent of theta and "no_n0" those independent of zeta; "mixed"
+            leaves out both. Each family left out is the one that can absorb a
+            relabelling of a single angle, so this removes that freedom from the fit.
+            Modes left out are zero in the returned surface.
+        verbose : int
+            Level of output when ``optimize=True``.
 
         Returns
         -------
@@ -656,24 +716,63 @@ class FourierRZToroidalSurface(Surface):
         )
         coords = np.asarray(coords)
         if basis == "xyz":
-            coords = xyz2rpz(coords)
+            coords = xyz2rpz(coords.reshape((-1, 3))).reshape(coords.shape)
+        fit_omega = zeta is not None
+        if isinstance(theta, str) or isinstance(zeta, str):
+            errorif(
+                coords.ndim != 3,
+                ValueError,
+                "theta or zeta given as a rule name needs coords as a structured "
+                + f"mesh of shape (nt, nz, 3), got shape {coords.shape}",
+            )
+            t_init, z_init = initial_labels(
+                coords,
+                NFP=NFP,
+                sym=sym,
+                theta=theta if isinstance(theta, str) else "curvature",
+                zeta=zeta if isinstance(zeta, str) else "phi",
+            )
+            theta = t_init if isinstance(theta, str) else theta
+            zeta = z_init if isinstance(zeta, str) else zeta
+        mesh_shape = coords.shape[:-1]
+        coords = coords.reshape((-1, 3))
         R = coords[:, 0]
         phi = coords[:, 1]
         Z = coords[:, 2]
-        theta = np.asarray(theta)
-        fit_omega = zeta is not None
-        zeta = phi if zeta is None else np.asarray(zeta)
+        theta = np.asarray(theta).ravel()
+        zeta = phi if zeta is None else np.asarray(zeta).ravel()
         assert (
             coords.shape[0] == theta.size == zeta.size
         ), "coords first dimension and theta, zeta must have same size"
+        if w is not None:
+            w = np.asarray(w).ravel()
+            assert w.size == R.size, "w must same length as number of points being fit"
+        if optimize:
+            return cls._from_values_optimized(
+                coords,
+                theta,
+                zeta,
+                M=M,
+                N=N,
+                Mw=int(setdefault(Mw, M)),
+                Nw=int(setdefault(Nw, N)),
+                NFP=NFP,
+                sym=sym,
+                fit_omega=fit_omega,
+                omega_modes=omega_modes,
+                maxiter=maxiter,
+                ftol=ftol,
+                tol=tol,
+                w=w,
+                check_orientation=check_orientation,
+                mesh_shape=mesh_shape,
+                verbose=verbose,
+            )
         nodes = Grid(
             np.vstack([np.ones_like(theta), theta, zeta]).T,
             sort=False,
             jitable=True,
         )
-        if w is not None:
-            w = np.asarray(w)
-            assert w.size == R.size, "w must same length as number of points being fit"
 
         def _fit(vals, vals_basis):
             # unweighted: least squares fit via basis pseudoinverse.
@@ -771,6 +870,194 @@ class FourierRZToroidalSurface(Surface):
             + f"= {min_phi_z:.3e}.",
         )
         return min_phi_z
+
+    @classmethod
+    def _from_fit(cls, bases, x, NFP, sym, check_orientation=True, **kwargs):
+        """Surface from packed coefficients on the given bases."""
+        R_basis, W_basis, Z_basis, w_idx = bases
+        R_lmn, W_lmn, Z_lmn = _unpack(bases, x)
+        if len(w_idx):
+            omega = dict(
+                W_lmn=W_lmn, modes_W=W_basis.modes[:, 1:], Mw=W_basis.M, Nw=W_basis.N
+            )
+        else:
+            omega = {}
+        return cls(
+            R_lmn,
+            Z_lmn,
+            R_basis.modes[:, 1:],
+            Z_basis.modes[:, 1:],
+            NFP,
+            bool(sym),
+            check_orientation=check_orientation,
+            **omega,
+            **kwargs,
+        )
+
+    @classmethod
+    def _from_values_optimized(
+        cls,
+        coords,
+        theta,
+        zeta,
+        M,
+        N,
+        Mw,
+        Nw,
+        NFP,
+        sym,
+        fit_omega,
+        omega_modes,
+        maxiter,
+        ftol,
+        tol,
+        w,
+        check_orientation,
+        mesh_shape,
+        verbose,
+    ):
+        """Fit with the angles of the points solved for along with the coefficients."""
+        bases = _fourier_bases(M, N, Mw, Nw, NFP, sym, fit_omega, omega_modes)
+        _check_determined(bases, coords.shape[0])
+        data = _prepare_data(coords, zeta, w)
+        x, t, z, nit = _optimize_labels(
+            bases, data, jnp.asarray(theta), jnp.asarray(zeta), maxiter, ftol, tol
+        )
+        if len(mesh_shape) == 2:
+            _check_label_order(
+                np.asarray(t).reshape(mesh_shape), np.asarray(z).reshape(mesh_shape)
+            )
+        if verbose:
+            err = np.asarray(_distance(bases, data, x, t, z))
+            _report(bases, float(np.sqrt(np.mean(err**2))), float(err.max()), int(nit))
+        surf = cls._from_fit(bases, x, NFP, sym, check_orientation)
+        return surf
+
+    def condense_spectrum(
+        self,
+        tol=1e-4,
+        M_max=None,
+        N_max=None,
+        M_min=1,
+        N_min=0,
+        grid=None,
+        fit_omega=True,
+        maxiter=100,
+        ftol=1e-4,
+        omega_modes="all",
+        verbose=1,
+    ):
+        """Find the lowest resolution representation of this surface within a tolerance.
+
+        The surface is sampled on a grid, and refit at a sequence of resolutions with
+        the angles of the sample points solved for along with the coefficients (see
+        ``from_values`` with ``optimize=True``), to find the resolution with the
+        fewest basis functions whose fit meets ``tol``. The returned surface describes
+        the same shape, but its poloidal and toroidal angles generally differ from
+        this surface's.
+
+        Parameters
+        ----------
+        tol : float
+            Tolerance on the rms distance from the sample points to the new surface,
+            relative to the mean minor radius.
+        M_max, N_max : int
+            Largest poloidal and toroidal resolution to consider. Default to this
+            surface's resolution. The same values are used for Mw and Nw.
+        M_min, N_min : int
+            Smallest poloidal and toroidal resolution to consider.
+        grid : LinearGrid
+            Tensor product grid in (theta, zeta) at a single rho to sample the
+            surface on. Defaults to a grid with about twice as many points as needed
+            to resolve the larger of this surface's resolution and ``M_max, N_max``.
+        fit_omega : bool
+            Whether the new surface may have a generalized toroidal angle,
+            phi = zeta + omega, with omega at the same resolution as R and Z. If
+            False, omega is zero and only the poloidal angle is solved for.
+        maxiter : int
+            Maximum number of iterations of each fit.
+        ftol : float
+            Stop each fit once the sum of squared distances falls by less than this
+            fraction in one iteration.
+        omega_modes : {"all", "no_m0", "no_n0", "mixed"}
+            Which omega modes to fit, see ``from_values``.
+        verbose : int
+            Level of output. 1 prints a summary, 2 also each resolution tried.
+
+        Returns
+        -------
+        surface : FourierRZToroidalSurface
+            New surface at the lowest resolution found.
+
+        """
+        M_max = check_nonnegint(setdefault(M_max, self.M), "M_max", False)
+        N_max = check_nonnegint(setdefault(N_max, self.N), "N_max", False)
+        M_min = check_nonnegint(M_min, "M_min", False)
+        N_min = check_nonnegint(N_min, "N_min", False)
+        errorif(
+            M_min > M_max or N_min > N_max,
+            ValueError,
+            "M_min, N_min must not exceed M_max, N_max",
+        )
+        if grid is None:
+            grid = LinearGrid(
+                rho=self.rho,
+                M=2 * max(M_max, self.M, self.Mw) + 1,
+                N=2 * max(N_max, self.N, self.Nw) + 1,
+                NFP=self.NFP,
+                sym=False,
+            )
+        errorif(
+            not grid.is_meshgrid or grid.num_rho != 1,
+            ValueError,
+            "grid should be a tensor product grid in (theta, zeta) at a single rho",
+        )
+        data = self.compute(["R", "phi", "Z"], grid=grid)
+        coords = np.stack([data["R"], data["phi"], data["Z"]], axis=-1)
+        coords = np.asarray(grid.meshgrid_reshape(coords, "rtz")[0])
+        nodes = np.asarray(grid.nodes)
+        theta = np.asarray(grid.meshgrid_reshape(nodes[:, 1], "rtz")[0])
+        zeta = np.asarray(grid.meshgrid_reshape(nodes[:, 2], "rtz")[0])
+        if not fit_omega:
+            zeta = coords[..., 1]
+        scale = _mean_minor_radius(coords)
+        best, _ = _condense(
+            coords,
+            theta,
+            zeta,
+            tol * scale,
+            M_min,
+            N_min,
+            M_max,
+            N_max,
+            dict(
+                NFP=self.NFP, sym=self.sym, fit_omega=fit_omega, omega_modes=omega_modes
+            ),
+            maxiter,
+            ftol,
+            verbose,
+        )
+        _check_label_order(best["theta"], best["zeta"])
+        warnif(
+            not best["ok"],
+            UserWarning,
+            f"No resolution up to M={M_max}, N={N_max} met tol={tol:.3e}; returning "
+            + f"M={best['M']}, N={best['N']} with rms error "
+            + f"{best['rms_err'] / scale:.3e} relative to the minor radius.",
+        )
+        if verbose:
+            _report(
+                best["bases"],
+                best["rms_err"],
+                best["max_err"],
+                best["nit"],
+                scale=scale,
+                tol=tol,
+            )
+        surf = self._from_fit(
+            best["bases"], best["x"], self.NFP, self.sym, rho=self.rho, name=self.name
+        )
+        return surf
 
     @classmethod
     def from_shape_parameters(

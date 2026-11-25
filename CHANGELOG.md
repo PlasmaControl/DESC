@@ -1,6 +1,14 @@
 Changelog
 =========
 
+Bug Fixes
+
+- Fixes the CPU fallback of ``desc.set_device("gpu")`` when no NVIDIA driver is found or JAX has no GPU backend.
+
+
+v0.17.4
+-------
+
 New Features
 
 - Adds `desc.compat.flip_magnetic_field` compatibility function to reverse the direction of an Equilibrium magnetic field.

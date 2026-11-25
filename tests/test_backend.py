@@ -50,6 +50,41 @@ def test_vmap():
 
 
 @pytest.mark.unit
+def test_set_device_gpu_without_nvidia_driver(monkeypatch):
+    """Test set_device("gpu") falls back to CPU without the NVIDIA driver."""
+    import pynvml
+
+    import desc
+
+    def nvml_init():
+        raise pynvml.NVMLError_LibraryNotFound()
+
+    monkeypatch.setattr(pynvml, "nvmlInit", nvml_init)
+    monkeypatch.setattr(desc, "config", {"kind": None})
+    for key in ["JAX_PLATFORMS", "CUDA_DEVICE_ORDER"]:  # restored after the test
+        monkeypatch.delenv(key, raising=False)
+    with pytest.warns(UserWarning, match="No usable NVIDIA driver"):
+        desc.set_device("gpu")
+    assert desc.config["kind"] == "cpu"
+
+
+@pytest.mark.unit
+def test_set_device_gpu_without_jax_gpu(monkeypatch):
+    """Test DESC falls back to CPU with a warning if JAX finds no GPU."""
+    import subprocess
+    import sys
+
+    # as after set_device("gpu") on a machine where JAX can't use the GPU
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "")
+    monkeypatch.delenv("JAX_PLATFORMS", raising=False)
+    code = "import desc; desc.config['kind'] = 'gpu'; import desc.backend; "
+    code += "print(desc.config['kind'])"
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert out.stdout == "cpu\n", out.stderr
+    assert "JAX failed to detect GPU" in out.stderr
+
+
+@pytest.mark.unit
 def test_root():
     """Test root and its derivative works properly."""
 

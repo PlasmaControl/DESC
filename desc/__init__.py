@@ -63,6 +63,41 @@ BANNER = colored(_BANNER, "magenta")
 config = {"device": None, "avail_mem": None, "kind": None}
 
 
+def _cgroup_memory_limit(proc="/proc/self/cgroup", root="/sys/fs/cgroup"):
+    """Tightest cgroup memory limit on this process, in bytes, or inf if none.
+
+    Batch systems (e.g. Slurm, PBS) and containers limit the memory of a job with a
+    cgroup, which ``psutil`` does not see. The limit can be on a parent of the
+    process's own cgroup (Slurm sets it on the job, above its step and task), so
+    the parents are read too. Both cgroup v2 and v1 are read.
+    """
+    limit = float("inf")
+    try:
+        with open(proc) as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return limit
+    for line in lines:
+        fields = line.split(":", 2)
+        if len(fields) != 3:
+            continue
+        _, controllers, path = fields
+        if controllers == "":  # cgroup v2
+            base, name = root, "memory.max"
+        elif "memory" in controllers.split(","):  # cgroup v1
+            base, name = os.path.join(root, "memory"), "memory.limit_in_bytes"
+        else:
+            continue
+        parts = [p for p in path.split("/") if p]
+        for i in range(len(parts) + 1):
+            try:
+                with open(os.path.join(base, *parts[:i], name)) as f:
+                    limit = min(limit, int(f.read()))
+            except (OSError, ValueError):  # no such file, or "max"
+                pass
+    return limit
+
+
 def set_device(kind="cpu", gpuid=None):
     """Sets the device to use for computation.
 
@@ -93,7 +128,10 @@ def set_device(kind="cpu", gpuid=None):
         import psutil
 
         config["device"] = "CPU"
-        config["avail_mem"] = psutil.virtual_memory().available / 1024**3
+        # in a batch job or a container, its cgroup memory limit applies as well
+        config["avail_mem"] = (
+            min(psutil.virtual_memory().available, _cgroup_memory_limit()) / 1024**3
+        )
     else:
         os.environ.pop("JAX_PLATFORMS", None)
     if kind == "gpu":

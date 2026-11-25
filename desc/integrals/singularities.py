@@ -5,12 +5,12 @@ from abc import ABC, abstractmethod
 import numpy as np
 import scipy
 from interpax import fft_interp2d
+from interpax_fft import rfft2_modes, rfft2_vander
 from scipy.constants import mu_0
 
 from desc.backend import fori_loop, jnp, rfft2
 from desc.batching import batch_map, vmap_chunked
 from desc.grid import LinearGrid
-from desc.integrals._interp_utils import rfft2_modes, rfft2_vander
 from desc.io import IOAble
 from desc.utils import (
     check_posint,

@@ -5,6 +5,7 @@ Run this script to regenerate all the DESC equilibria in desc/examples.
 python3 regenerate_all_equilibria.py
 
 """
+
 import argparse
 import glob
 import os

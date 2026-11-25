@@ -852,6 +852,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         npts=128,
         stell_sym=False,
         plot_kwargs={"figsize": (8, 6)},
+        check_intersection=True,
     ):
         """Find helical or modular coils from this surface current potential.
 
@@ -895,6 +896,9 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             dict of kwargs to use when plotting the contour plots if ``show_plots=True``
             ``figsize`` is used for the figure size, and the rest are passed to
             ``plt.contourf``
+        check_intersection : bool
+            whether or not to check the resulting coilset for self-intersections.
+            Defaults to True.
 
         Returns
         -------
@@ -1013,12 +1017,15 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         # symmetry plane, in which case we will check
         if coil_type == "modular":
             final_coilset = CoilSet(
-                *coils, NFP=nfp, sym=stell_sym, check_intersection=stell_sym
+                *coils,
+                NFP=nfp,
+                sym=stell_sym,
+                check_intersection=check_intersection,
             )
         else:
             # TODO: once winding surface curve is implemented, enforce sym for
             # helical as well
-            final_coilset = CoilSet(*coils, check_intersection=False)
+            final_coilset = CoilSet(*coils, check_intersection=check_intersection)
         return final_coilset
 
     def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7, default=0.0):

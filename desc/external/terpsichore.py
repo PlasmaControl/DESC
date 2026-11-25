@@ -1,3 +1,5 @@
+"""Functions to run the TERPSICHORE stability solver on a DESC equilibrium."""
+
 import datetime
 import functools
 import multiprocessing as mp
@@ -18,6 +20,10 @@ from desc.objectives.objective_funs import collect_docs
 from desc.transform import Transform
 from desc.utils import errorif, warnif
 from desc.vmec_utils import ptolemy_identity_rev, zernike_to_fourier
+
+__all__ = [
+    "TERPSICHORE",
+]
 
 
 def terpsichore(

@@ -16,7 +16,7 @@ from qsc import Qsc
 from scipy.constants import elementary_charge, mu_0
 
 import desc.examples
-from desc.backend import jnp
+from desc.backend import jax, jnp
 from desc.coils import (
     CoilSet,
     FourierPlanarCoil,
@@ -46,6 +46,8 @@ from desc.objectives import (
     BallooningStability,
     BootstrapRedlConsistency,
     BoundaryError,
+    BoundaryRSelfConsistency,
+    BoundaryZSelfConsistency,
     BScaleLength,
     CoilArclengthVariance,
     CoilCurrentLength,
@@ -55,6 +57,7 @@ from desc.objectives import (
     CoilSetLinkingNumber,
     CoilSetMinDistance,
     CoilTorsion,
+    DeflationOperator,
     EffectiveRipple,
     Elongation,
     Energy,
@@ -72,6 +75,7 @@ from desc.objectives import (
     MeanCurvature,
     MercierStability,
     MirrorRatio,
+    NeutronWallLoading,
     ObjectiveFromUser,
     ObjectiveFunction,
     Omnigenity,
@@ -108,7 +112,7 @@ from desc.profiles import (
     PowerSeriesProfile,
     ScaledProfile,
 )
-from desc.utils import PRINT_WIDTH, safenorm
+from desc.utils import PRINT_WIDTH, ResolutionWarning, safenorm
 from desc.vmec_utils import ptolemy_linear_transform
 
 
@@ -122,9 +126,9 @@ class TestObjectiveFunction:
         def test(f, thing, grid=None, compress=False):
             obj = GenericObjective(f, thing=thing, grid=grid)
             obj.build()
-            val = thing.compute(f, grid=obj.constants["transforms"]["grid"])[f]
+            val = thing.compute(f, grid=obj._constants["transforms"]["grid"])[f]
             if compress:
-                val = obj.constants["transforms"]["grid"].compress(val)
+                val = obj._constants["transforms"]["grid"].compress(val)
             np.testing.assert_allclose(
                 obj.compute(thing.params_dict),
                 val,
@@ -140,6 +144,31 @@ class TestObjectiveFunction:
         test("sqrt(g)", Equilibrium())
         test("current", Equilibrium(iota=PowerSeriesProfile(0)), None, True)
         test("iota", Equilibrium(current=PowerSeriesProfile(0)), None, True)
+
+    @pytest.mark.unit
+    def test_generic_theta_zeta_only(self):
+        """Test GenericObjective for quantities that only depend on theta or zeta."""
+        eq = get("HELIOTRON")
+        grid = LinearGrid(L=2, M=eq.M_grid, N=4, NFP=eq.NFP)
+        for f, label in [
+            ("theta", "poloidal"),
+            ("zeta", "zeta"),
+            ("A(z)", "zeta"),
+            ("perimeter(z)", "zeta"),
+        ]:
+            obj = GenericObjective(f, thing=eq, grid=grid)
+            obj.build()
+            val = grid.compress(eq.compute(f, grid=grid)[f], surface_label=label)
+            assert obj.dim_f == getattr(grid, f"num_{label}")
+            np.testing.assert_allclose(obj.compute(eq.params_dict), val)
+
+        # one target per unique zeta is accepted
+        target = grid.compress(grid.nodes[:, 2], surface_label="zeta")
+        obj = GenericObjective("zeta", thing=eq, grid=grid, target=target)
+        obj.build()
+        np.testing.assert_allclose(
+            obj.compute_scaled_error(eq.params_dict), 0, atol=1e-14
+        )
 
     @pytest.mark.unit
     def test_objective_from_user(self):
@@ -466,19 +495,19 @@ class TestObjectiveFunction:
         # precise_QA should have lower QA than QH
         obj = QuasisymmetryTwoTerm(eq=eq1, helicity=helicity_QA)
         obj.build()
-        f1 = obj.compute_scalar(*obj.xs(eq1), constants=obj.constants)
+        f1 = obj.compute_scalar(*obj.xs(eq1))
         obj.helicity = helicity_QH
         obj.build()
-        f2 = obj.compute_scalar(*obj.xs(eq1), constants=obj.constants)
+        f2 = obj.compute_scalar(*obj.xs(eq1))
         assert f1 < f2
 
         # precise_QH should have lower QH than QA
         obj = QuasisymmetryTwoTerm(eq=eq2, helicity=helicity_QH)
         obj.build()
-        f1 = obj.compute_scalar(*obj.xs(eq2), constants=obj.constants)
+        f1 = obj.compute_scalar(*obj.xs(eq2))
         obj.helicity = helicity_QA
         obj.build()
-        f2 = obj.compute_scalar(*obj.xs(eq2), constants=obj.constants)
+        f2 = obj.compute_scalar(*obj.xs(eq2))
         assert f1 < f2
 
     @pytest.mark.unit
@@ -493,6 +522,77 @@ class TestObjectiveFunction:
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
+
+    @pytest.mark.unit
+    def test_qs_hat_modes(self):
+        """Test the dimensionless "hat" modes of the QS objectives."""
+        eq = get("HELIOTRON")
+        eq.change_resolution(M=6, M_grid=12, N=2, N_grid=4)
+        helicity = (1, eq.NFP)
+        rho = np.array([0.6, 1.0])
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=rho)
+
+        booz = {"helicity": helicity, "M_booz": eq.M, "N_booz": eq.N}
+        objs = {
+            "fb": QuasisymmetryBoozer(eq=eq, grid=grid, scale_invariant=False, **booz),
+            "fb_hat": QuasisymmetryBoozer(
+                eq=eq, grid=grid, scale_invariant=True, **booz
+            ),
+            "fc_hat": QuasisymmetryTwoTerm(
+                eq=eq, grid=grid, helicity=helicity, scale_invariant=True
+            ),
+            "ft_hat": QuasisymmetryTripleProduct(
+                eq=eq, grid=grid, scale_invariant=True
+            ),
+        }
+        f = {}
+        for mode, obj in objs.items():
+            obj.build()
+            if mode.endswith("_hat"):
+                assert obj._units == "(dimensionless)"
+                assert obj.normalization == 1
+            assert obj.compute_scaled_error(*obj.xs(eq)).size == obj.dim_f
+            f[mode] = obj.compute_unscaled(*obj.xs(eq))
+            assert np.all(np.isfinite(f[mode]))
+
+        # on each surface this is the ratio of the norm of the symmetry breaking
+        # harmonics to the norm of all the harmonics, so it is between 0 and 1
+        ratio = np.linalg.norm(f["fb_hat"].reshape((rho.size, -1)), axis=-1)
+        assert np.all(ratio > 0) and np.all(ratio < 1)
+
+    @pytest.mark.unit
+    def test_qs_hat_modes_field_strength_invariance(self):
+        """Test that the QS "hat" modes are invariant to the field strength."""
+        # has an iota profile, so |B| is proportional to Psi
+        eq1 = get("HELIOTRON")
+        eq1.change_resolution(M=6, M_grid=12, N=2, N_grid=4)
+        eq2 = eq1.copy()
+        eq2.Psi = 2 * eq1.Psi
+        helicity = (1, eq1.NFP)
+        grid = LinearGrid(M=eq1.M_grid, N=eq1.N_grid, NFP=eq1.NFP, rho=np.array([0.6]))
+
+        def test(obj, mode, ratio, **kwargs):
+            obj1 = obj(
+                eq=eq1, grid=grid, scale_invariant=mode, normalize=False, **kwargs
+            )
+            obj2 = obj(
+                eq=eq2, grid=grid, scale_invariant=mode, normalize=False, **kwargs
+            )
+            obj1.build()
+            obj2.build()
+            f1 = ratio * obj1.compute_scaled_error(*obj1.xs(eq1))
+            f2 = obj2.compute_scaled_error(*obj2.xs(eq2))
+            atol = 1e-10 * np.max(np.abs(f1))
+            np.testing.assert_allclose(f2, f1, rtol=1e-10, atol=atol)
+
+        # scale variant quantities scale as |B|^n, others are invariant
+        booz = {"helicity": helicity, "M_booz": eq1.M, "N_booz": eq1.N}
+        test(QuasisymmetryBoozer, False, 2, **booz)
+        test(QuasisymmetryBoozer, True, 1, **booz)
+        test(QuasisymmetryTwoTerm, False, 2**3, helicity=helicity)
+        test(QuasisymmetryTwoTerm, True, 1, helicity=helicity)
+        test(QuasisymmetryTripleProduct, False, 2**4)
+        test(QuasisymmetryTripleProduct, True, 1)
 
     @pytest.mark.unit
     def test_isodynamicity(self):
@@ -526,12 +626,24 @@ class TestObjectiveFunction:
             obj.build()
             DMerc = obj.compute_unscaled(*obj.xs(eq))
             np.testing.assert_equal(
-                len(DMerc), obj.constants["transforms"]["grid"].num_rho
+                len(DMerc), obj._constants["transforms"]["grid"].num_rho
             )
             np.testing.assert_allclose(DMerc, 0)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
-        test(Equilibrium(current=PowerSeriesProfile(0)))
+        eq = Equilibrium(current=PowerSeriesProfile(0))
+        test(eq)
+        # test warnings
+        eq.change_resolution(N=1, N_grid=2, M=2, M_grid=4)
+        grid_bad_pol_res = LinearGrid(rho=0.5, M=0, N=eq.N_grid)
+        with pytest.warns(ResolutionWarning, match="poloidal"):
+            MercierStability(eq=eq, grid=grid_bad_pol_res).build()
+        grid_bad_tor_res = LinearGrid(rho=0.5, M=eq.M_grid, N=0)
+        with pytest.warns(ResolutionWarning, match="toroidal"):
+            MercierStability(eq=eq, grid=grid_bad_tor_res).build()
+        grid_bad_axis = LinearGrid(rho=0.0, M=eq.M_grid, N=eq.N_grid)
+        with pytest.raises(ValueError, match="on-axis"):
+            MercierStability(eq=eq, grid=grid_bad_axis).build()
 
     @pytest.mark.unit
     def test_magnetic_well(self):
@@ -542,12 +654,21 @@ class TestObjectiveFunction:
             obj.build()
             magnetic_well = obj.compute_unscaled(*obj.xs(eq))
             np.testing.assert_equal(
-                len(magnetic_well), obj.constants["transforms"]["grid"].num_rho
+                len(magnetic_well), obj._constants["transforms"]["grid"].num_rho
             )
             np.testing.assert_allclose(magnetic_well, 0, atol=1e-15)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
-        test(Equilibrium(current=PowerSeriesProfile(0)))
+        eq = Equilibrium(current=PowerSeriesProfile(0))
+        test(eq)
+        # test warnings
+        eq.change_resolution(N=1, N_grid=2, M=2, M_grid=4)
+        grid_bad_pol_res = LinearGrid(rho=0.5, M=0, N=eq.N_grid)
+        with pytest.warns(ResolutionWarning, match="poloidal"):
+            MagneticWell(eq=eq, grid=grid_bad_pol_res).build()
+        grid_bad_tor_res = LinearGrid(rho=0.5, M=eq.M_grid, N=0)
+        with pytest.warns(ResolutionWarning, match="toroidal"):
+            MagneticWell(eq=eq, grid=grid_bad_tor_res).build()
 
     @pytest.mark.unit
     def test_boundary_error_biestsc(self):
@@ -587,6 +708,86 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(f[:n], 0, atol=1e-4)
         # next n should be B^2 errors
         np.testing.assert_allclose(f[n : 2 * n], 0, atol=5e-2)
+
+    @pytest.mark.unit
+    def test_boundary_error_things_fixed(self):
+        """Test BoundaryError for eq_fixed/field_fixed combos."""
+        eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
+        eq.surface = FourierCurrentPotentialField.from_surface(
+            eq.surface, M_Phi=eq.M, N_Phi=eq.N
+        )
+        eq.solve()
+
+        coil = FourierXYZCoil(5e5)
+        coilset = CoilSet.linspaced_angular(coil, n=100, check_intersection=False)
+        field = [coilset, ToroidalMagneticField(B0=0, R0=1)]
+
+        def test(eq_fixed=False, field_fixed=False):
+            obj = BoundaryError(eq, field, eq_fixed=eq_fixed, field_fixed=field_fixed)
+            obj.build()
+            f = obj.compute_scaled_error(*obj.xs())
+            n = len(f) // 3
+            # first n should be B*n errors
+            np.testing.assert_allclose(f[:n], 0, atol=1e-4)
+            # next n should be B^2 errors
+            np.testing.assert_allclose(f[n : 2 * n], 0, atol=5e-2)
+            # last n should be K errors
+            np.testing.assert_allclose(f[2 * n :], 0, atol=3e-2)
+
+        test(eq_fixed=False, field_fixed=False)
+        test(eq_fixed=True)
+        test(field_fixed=True)
+
+        with pytest.raises(ValueError, match="At least one"):
+            BoundaryError(eq, field, eq_fixed=True, field_fixed=True)
+
+    @pytest.mark.unit
+    def test_boundary_error_sheet_current_derivative(self):
+        """Test BoundaryError derivative through surface with sheet current."""
+        # ProximalProjection differentiates with Rb_lmn, Zb_lmn held fixed, so the
+        # derivative along R_lmn, Z_lmn alone must include the sheet moving with
+        # the boundary.
+        eq = Equilibrium(L=3, M=3, N=1, Psi=np.pi)
+        eq.surface = FourierCurrentPotentialField.from_surface(
+            eq.surface, M_Phi=2, N_Phi=1, G=-2.5e7
+        )
+        rng = np.random.default_rng(0)
+        eq.surface.Phi_mn = 1e6 * rng.standard_normal(eq.surface.Phi_mn.size)
+        field = ToroidalMagneticField(B0=1, R0=10)
+        obj = ObjectiveFunction(BoundaryError(eq, field, field_fixed=True))
+        obj.build(verbose=0)
+        self_consistency = ObjectiveFunction(
+            (BoundaryRSelfConsistency(eq=eq), BoundaryZSelfConsistency(eq=eq))
+        )
+        self_consistency.build(verbose=0)
+
+        x = obj.x(eq)
+        idx = eq.x_idx
+        # move R_lmn, Z_lmn with Rb_lmn, Zb_lmn fixed, as in proximal
+        dx = jnp.zeros_like(x)
+        dx = dx.at[idx["R_lmn"]].set(1e-2 * rng.standard_normal(idx["R_lmn"].size))
+        dx = dx.at[idx["Z_lmn"]].set(1e-2 * rng.standard_normal(idx["Z_lmn"].size))
+        # move Rb_lmn, Zb_lmn to stay consistent with R_lmn, Z_lmn at rho=1
+        dxb = jnp.zeros_like(x)
+        dxb = dxb.at[jnp.concatenate([idx["Rb_lmn"], idx["Zb_lmn"]])].set(
+            self_consistency.jvp_unscaled((dx,), x)
+        )
+        np.testing.assert_allclose(
+            self_consistency.jvp_unscaled((dx + dxb,), x), 0, atol=1e-14
+        )
+
+        # BoundaryError should not read Rb_lmn, Zb_lmn at all
+        np.testing.assert_allclose(obj.jvp_scaled_error((dxb,), x), 0, atol=1e-12)
+
+        # derivative along R_lmn, Z_lmn alone should match a central difference
+        # that moves the whole boundary consistently
+        h = 1e-4
+        df = obj.jvp_scaled_error((dx,), x)
+        df_fd = (
+            obj.compute_scaled_error(x + h * (dx + dxb))
+            - obj.compute_scaled_error(x - h * (dx + dxb))
+        ) / (2 * h)
+        np.testing.assert_allclose(df, df_fd, rtol=1e-5, atol=1e-6 * np.abs(df).max())
 
     @pytest.mark.unit
     def test_boundary_error_vacuum(self):
@@ -1063,20 +1264,55 @@ class TestObjectiveFunction:
     def test_coil_min_distance(self):
         """Tests minimum distance between coils in a coilset."""
 
-        def test(coils, mindist, grid=None, expect_intersect=False, tol=None):
-            obj = CoilSetMinDistance(coils, grid=grid)
-            obj.build()
-            f = obj.compute(params=coils.params_dict)
-            assert f.size == coils.num_coils
-            np.testing.assert_allclose(f, mindist)
+        def test(
+            coils,
+            mindist,
+            grid=None,
+            num_neighbors=None,
+            expect_intersect=False,
+            tol=None,
+        ):
+            # vanilla
+            obj1 = CoilSetMinDistance(coils, grid=grid)
+            obj1.build()
+            f1 = obj1.compute(params=coils.params_dict)
+            assert f1.size == coils.num_coils
+            np.testing.assert_allclose(f1, mindist)
             assert coils.is_self_intersecting(grid=grid, tol=tol) == expect_intersect
+            # softmin
             obj2 = CoilSetMinDistance(
                 coils, grid=grid, use_softmin=True, softmin_alpha=10
             )
             obj2.build()
-            f = obj2.compute(params=coils.params_dict)
-            assert f.size == coils.num_coils
-            np.testing.assert_allclose(f, mindist, rtol=5e-2, atol=1e-3)
+            f2 = obj2.compute(params=coils.params_dict)
+            assert f2.size == coils.num_coils
+            np.testing.assert_allclose(f2, mindist, rtol=5e-2, atol=1e-3)
+            # num_neighbors
+            obj3 = CoilSetMinDistance(coils, grid=grid, num_neighbors=num_neighbors)
+            obj3.build()
+            f3 = obj3.compute(params=coils.params_dict)
+            assert f3.size == coils.num_coils
+            np.testing.assert_allclose(f3, mindist)
+            # softmin & num_neighbors
+            obj4 = CoilSetMinDistance(
+                coils,
+                grid=grid,
+                use_softmin=True,
+                softmin_alpha=10,
+                num_neighbors=num_neighbors,
+            )
+            obj4.build()
+            f4 = obj4.compute(params=coils.params_dict)
+            assert f4.size == coils.num_coils
+            np.testing.assert_allclose(f4, mindist, rtol=5e-2, atol=1e-3)
+            # test derivatives
+            obj1 = ObjectiveFunction(obj1)
+            obj3 = ObjectiveFunction(obj3)
+            obj1.build()
+            obj3.build()
+            g1 = obj1.jac_unscaled(obj1.x(coils))
+            g3 = obj3.jac_unscaled(obj3.x(coils))
+            np.testing.assert_allclose(g1, g3)
 
         # linearly spaced planar coils, all coils are min distance from their neighbors
         n = 3
@@ -1085,7 +1321,7 @@ class TestObjectiveFunction:
         coils_linear = CoilSet.linspaced_linear(
             coil, n=n, displacement=[0, 0, disp], check_intersection=False
         )
-        test(coils_linear, disp / n)
+        test(coils_linear, disp / n, num_neighbors=2)
 
         # planar toroidal coils, without symmetry
         # min points are at the inboard midplane and are corners of a square inscribed
@@ -1095,7 +1331,11 @@ class TestObjectiveFunction:
         coil = FourierPlanarCoil(center=[center, 0, 0], normal=[0, 1, 0], r_n=r)
         coils_angular = CoilSet.linspaced_angular(coil, n=4, check_intersection=False)
         test(
-            coils_angular, np.sqrt(2) * (center - r), grid=LinearGrid(zeta=4), tol=1e-5
+            coils_angular,
+            np.sqrt(2) * (center - r),
+            grid=LinearGrid(zeta=4),
+            num_neighbors=2,
+            tol=1e-5,
         )
 
         # planar toroidal coils, with symmetry
@@ -1108,7 +1348,12 @@ class TestObjectiveFunction:
             coil, angle=np.pi / 2, n=5, endpoint=True, check_intersection=False
         )
         coils_sym = CoilSet(coils[1::2], NFP=2, sym=True)
-        test(coils_sym, 2 * (center - r) * np.sin(np.pi / 8), grid=LinearGrid(zeta=4))
+        test(
+            coils_sym,
+            2 * (center - r) * np.sin(np.pi / 8),
+            grid=LinearGrid(zeta=4),
+            num_neighbors=3,
+        )
 
         # mixture of toroidal field coilset, vertical field coilset, and extra coil
         # TF coils instersect with the middle VF coil
@@ -1132,6 +1377,7 @@ class TestObjectiveFunction:
                 coils_mixed,
                 [0, 0, 0, 0, 1, 0, 1, 2],
                 grid=LinearGrid(zeta=4),
+                num_neighbors=10,  # num_neighbors > num_coils
                 expect_intersect=True,
             )
         # TODO (#1400, 914): move this coil set to conftest?
@@ -1659,6 +1905,7 @@ class TestObjectiveFunction:
         # one way and half going the other way
         coilset = CoilSet.from_symmetry(coil, NFP=5, sym=True, check_intersection=False)
         coil2 = FourierRZCoil()
+
         # add a coil along the axis that links all the other coils
         coilset2 = MixedCoilSet(coilset, coil2, check_intersection=False)
 
@@ -1669,6 +1916,17 @@ class TestObjectiveFunction:
         # while the axis links all 10 modular coils
         expected = np.array([1] * 10 + [10])
         np.testing.assert_allclose(out, expected, rtol=1e-3)
+
+        # produce a coilset of non-planar coils with nonzero writhe
+        coil3 = FourierXYZCoil(
+            X_n=[0, 0.5, 5, 1, 0], Y_n=[0, 0, 0, 0, 0.5], Z_n=[0, -1, 0, 0, 1]
+        )
+        coilset3 = CoilSet.from_symmetry(coil3, NFP=5, check_intersection=False)
+        obj = CoilSetLinkingNumber(coilset3)
+        obj.build()
+        out = obj.compute_scaled_error(coilset3.params_dict)
+        expected = np.array([0] * 5)
+        np.testing.assert_allclose(out, expected, atol=1e-12)
 
     @pytest.mark.unit
     def test_signed_plasma_vessel_distance(self):
@@ -2013,65 +2271,41 @@ class TestObjectiveFunction:
         test(field, grid, "sqrt(Phi)")
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("use_bounce1d", [False, True])
-    def test_objective_compute_against_compute_bounce(self, use_bounce1d):
+    def test_objective_against_compute_bounce(self):
         """Test objectives are built properly."""
         eq = get("W7-X")
         rho = np.linspace(0.1, 1, 3)
-        obj_grid = LinearGrid(
-            rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=use_bounce1d and eq.sym
-        )
+        obj_grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
         X = 16
         Y = 32
-        num_transit = 4
+        field_period_transits = 20
         opts = dict(
-            Y_B=64,
-            num_transit=num_transit,
-            num_well=15 * num_transit,
+            Y_B=13,
+            field_period_transits=field_period_transits,
+            num_well=3 * field_period_transits,
             num_quad=16,
             num_pitch=10,
         )
         names = ["effective ripple", "Gamma_c"]
-        if use_bounce1d:
-            names = ["old " + n for n in names]
-            theta = None
-            alpha = np.array([0.0])
-            zeta = np.linspace(0, num_transit * 2 * np.pi, num_transit * opts["Y_B"])
-            grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
-        else:
-            theta = Bounce2D.compute_theta(eq, X, Y, rho)
-            grid = obj_grid
+        angle = Bounce2D.angle(eq, X, Y, rho)
+        grid = obj_grid
 
-        data = eq.compute(names, grid, theta=theta, **opts)
-        obj = EffectiveRipple(
-            eq,
-            grid=obj_grid,
-            nufft_eps=1e-6,
-            use_bounce1d=use_bounce1d,
-            X=X,
-            Y=Y,
-            **opts,
-        )
+        data = eq.compute(names, grid, angle=angle, **opts)
+        obj = EffectiveRipple(eq, grid=obj_grid, nufft_eps=1e-6, X=X, Y=Y, **opts)
         obj.build()
+        assert obj._hyperparam["num_well"] == opts["num_well"]
         np.testing.assert_allclose(
             obj.compute(eq.params_dict), grid.compress(data[names[0]])
         )
-        obj = GammaC(
-            eq,
-            grid=obj_grid,
-            nufft_eps=1e-7,
-            use_bounce1d=use_bounce1d,
-            X=X,
-            Y=Y,
-            **opts,
-        )
+        obj = GammaC(eq, grid=obj_grid, nufft_eps=1e-7, X=X, Y=Y, **opts)
         obj.build()
+        assert obj._hyperparam["num_well"] == opts["num_well"]
         np.testing.assert_allclose(
             obj.compute(eq.params_dict), grid.compress(data[names[1]])
         )
 
     @pytest.mark.unit
-    def test_objective_compute_against_compute_ballooning(self):
+    def test_objective_against_compute_ballooning(self):
         """To avoid issues such as #1424."""
         eq = get("W7-X")
         obj = desc.objectives.BallooningStability(eq=eq)
@@ -2079,14 +2313,18 @@ class TestObjectiveFunction:
         lam = eq.compute(
             ["ideal ballooning lambda"],
             Grid.create_meshgrid(
-                [obj.constants["rho"], obj.constants["alpha"], obj.constants["zeta"]],
+                [
+                    obj._constants["rho"],
+                    obj._constants["alpha"],
+                    obj._constants["zeta"],
+                ],
                 coordinates="raz",
             ),
         )["ideal ballooning lambda"]
         lambda0, w0, w1 = (
-            obj.constants["lambda0"],
-            obj.constants["w0"],
-            obj.constants["w1"],
+            obj._constants["lambda0"],
+            obj._constants["w0"],
+            obj._constants["w1"],
         )
         lam = (lam - lambda0) * (lam >= lambda0)
         lam = w0 * lam.sum(axis=(-1, -2, -3)) + w1 * lam.max(axis=(-1, -2, -3))
@@ -2132,6 +2370,69 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(p0_out, p1_out)
         np.testing.assert_allclose(p0_in, p1_in)
         np.testing.assert_allclose(q0, q1)
+
+    @pytest.mark.unit
+    def test_neutron_wall_loading_reactor_QA(self):
+        """Test NeutronWallLoading on the reactor_QA example."""
+        eq = get("reactor_QA")
+        offset = 0.1
+
+        source_grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        surface_grid = LinearGrid(
+            rho=1.0,
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=eq.NFP,
+            sym=False,
+            endpoint=True,
+        )
+
+        obj = NeutronWallLoading(
+            eq=eq,
+            offset=offset,
+            source_grid=source_grid,
+            surface_grid=surface_grid,
+        )
+        obj.build(use_jit=False, verbose=0)
+        nwl = np.asarray(obj.compute(*obj.xs(eq)))
+
+        # check that NWL has the right shape and is non-negative
+        assert nwl.shape == (surface_grid.num_nodes,)
+        assert np.all(nwl >= -1e-12)
+
+        # DT neutrons carry about 80% of the total fusion energy, so the
+        # surface-area-weighted mean NWL should approximately match 0.8 * P_fusion / S.
+        wall = eq.surface.constant_offset_surface(offset, grid=surface_grid)
+        wall_data = wall.compute(["S", "|e_theta x e_zeta|"], grid=surface_grid)
+        wall_area = float(wall_data["S"])
+        wall_weights = np.asarray(wall_data["|e_theta x e_zeta|"]) * np.asarray(
+            surface_grid.weights
+        )
+        fusion_power = float(
+            eq.compute("P_fusion", grid=source_grid, fuel="DT")["P_fusion"]
+        )
+        avg_nwl_from_power = 0.8 * fusion_power / wall_area * 1e-6
+        weighted_mean_nwl = float(np.sum(nwl * wall_weights) / np.sum(wall_weights))
+
+        np.testing.assert_allclose(weighted_mean_nwl, avg_nwl_from_power, rtol=0.12)
+
+        # For fixed temperature, geometry, and fuel mix, the DT fusion rate scales like
+        # n_D * n_T. Doubling the density doubles both species densities, so both the
+        # fusion power and the local neutron wall loading should increase by scale**2.
+        scale = 2.0
+        eq_scaled = eq.copy()
+        eq_scaled.electron_density.params = eq_scaled.electron_density.params * scale
+
+        obj_scaled = NeutronWallLoading(
+            eq=eq_scaled,
+            offset=offset,
+            source_grid=source_grid,
+            surface_grid=surface_grid,
+        )
+        obj_scaled.build(use_jit=False, verbose=0)
+        nwl_scaled = np.asarray(obj_scaled.compute(*obj_scaled.xs(eq_scaled)))
+
+        np.testing.assert_allclose(nwl_scaled, nwl * scale**2, rtol=1e-5, atol=1e-12)
 
     @pytest.mark.unit
     def test_things_per_objective_idx(self):
@@ -2241,7 +2542,8 @@ def test_derivative_modes():
         jac_chunk_size="auto",
         use_jit=False,
     )
-    obj1.build()
+    with pytest.warns(UserWarning, match="batched"):
+        obj1.build()
     obj2.build()
     # check that default size works for blocked
     assert obj2.objectives[0]._jac_chunk_size == 2
@@ -2249,7 +2551,8 @@ def test_derivative_modes():
     assert obj2.objectives[2]._jac_chunk_size is None
     # hard to say what size auto will give, just check it is >0
     assert obj1._jac_chunk_size > 0
-    obj3.build()
+    with pytest.warns(UserWarning, match="batched"):
+        obj3.build()
     x = obj1.x(eq, surf)
     v = jnp.ones_like(x)
     g1 = obj1.grad(x)
@@ -2398,8 +2701,8 @@ def test_target_profiles():
     np.testing.assert_allclose(
         obji.target,
         iota(
-            obji.constants["transforms"]["grid"].nodes[
-                obji.constants["transforms"]["grid"].unique_rho_idx
+            obji._constants["transforms"]["grid"].nodes[
+                obji._constants["transforms"]["grid"].unique_rho_idx
             ]
         ),
     )
@@ -2408,8 +2711,8 @@ def test_target_profiles():
     np.testing.assert_allclose(
         objs.target,
         shear(
-            objs.constants["transforms"]["grid"].nodes[
-                objs.constants["transforms"]["grid"].unique_rho_idx
+            objs._constants["transforms"]["grid"].nodes[
+                objs._constants["transforms"]["grid"].unique_rho_idx
             ]
         ),
     )
@@ -2418,8 +2721,8 @@ def test_target_profiles():
     np.testing.assert_allclose(
         objc.target,
         current(
-            objc.constants["transforms"]["grid"].nodes[
-                objc.constants["transforms"]["grid"].unique_rho_idx
+            objc._constants["transforms"]["grid"].nodes[
+                objc._constants["transforms"]["grid"].unique_rho_idx
             ]
         ),
     )
@@ -2428,8 +2731,8 @@ def test_target_profiles():
     np.testing.assert_allclose(
         objm.bounds[0],
         merc(
-            objm.constants["transforms"]["grid"].nodes[
-                objm.constants["transforms"]["grid"].unique_rho_idx
+            objm._constants["transforms"]["grid"].nodes[
+                objm._constants["transforms"]["grid"].unique_rho_idx
             ]
         ),
     )
@@ -2439,16 +2742,16 @@ def test_target_profiles():
     np.testing.assert_allclose(
         objw.bounds[0],
         merc(
-            objw.constants["transforms"]["grid"].nodes[
-                objw.constants["transforms"]["grid"].unique_rho_idx
+            objw._constants["transforms"]["grid"].nodes[
+                objw._constants["transforms"]["grid"].unique_rho_idx
             ]
         ),
     )
     np.testing.assert_allclose(
         objw.bounds[1],
         well(
-            objw.constants["transforms"]["grid"].nodes[
-                objw.constants["transforms"]["grid"].unique_rho_idx
+            objw._constants["transforms"]["grid"].nodes[
+                objw._constants["transforms"]["grid"].unique_rho_idx
             ]
         ),
     )
@@ -2457,8 +2760,8 @@ def test_target_profiles():
     np.testing.assert_allclose(
         objp.target,
         pres(
-            objp.constants["transforms"]["grid"].nodes[
-                objp.constants["transforms"]["grid"].unique_rho_idx
+            objp._constants["transforms"]["grid"].nodes[
+                objp._constants["transforms"]["grid"].unique_rho_idx
             ]
         ),
     )
@@ -2467,8 +2770,8 @@ def test_target_profiles():
     np.testing.assert_allclose(
         objp.target,
         2
-        * objp.constants["transforms"]["grid"].nodes[
-            objp.constants["transforms"]["grid"].unique_rho_idx, 0
+        * objp._constants["transforms"]["grid"].nodes[
+            objp._constants["transforms"]["grid"].unique_rho_idx, 0
         ],
     )
 
@@ -2482,17 +2785,26 @@ def test_profile_objective_print(capsys):
     grid = LinearGrid(L=10, M=10, N=5, axis=False)
     pre_width = len("Maximum ")
 
-    def test(obj, values, print_init=False, normalize=False):
+    def test(obj, values, print_init=False, normalize=False, pass_f=False):
+        par = obj.xs(eq)
+        if pass_f:
+            fse = obj.compute_scaled_error(*par)
         if print_init:
             # print the initial value too. For this test, it is the
             # same as the final value
-            obj.print_value(obj.xs(eq), obj.xs(eq))
+            if not pass_f:
+                obj.print_value(args=par, args0=par)
+            else:
+                obj.print_value(args=par, args0=par, fse=fse, f0se=fse)
             print_fmt = (
                 f"{obj._print_value_fmt:<{PRINT_WIDTH-pre_width}}"
                 + "{:10.3e}  -->  {:10.3e} "
             )
         else:
-            obj.print_value(obj.xs(eq))
+            if not pass_f:
+                obj.print_value(args=par)
+            else:
+                obj.print_value(args=par, fse=fse)
             print_fmt = f"{obj._print_value_fmt:<{PRINT_WIDTH-pre_width}}" + "{:10.3e} "
         out = capsys.readouterr()
 
@@ -2546,10 +2858,18 @@ def test_profile_objective_print(capsys):
     obj = Shear(eq=eq, target=1, grid=grid)
     obj.build()
     test(obj, shear)
+    shear = eq.compute("shear", grid=grid)["shear"]
+    obj = Shear(eq=eq, target=1, grid=grid)
+    obj.build()
+    test(obj, shear, pass_f=True)
     curr = eq.compute("current", grid=grid)["current"]
     obj = ToroidalCurrent(eq=eq, target=1, grid=grid)
     obj.build()
     test(obj, curr, print_init=True, normalize=True)
+    curr = eq.compute("current", grid=grid)["current"]
+    obj = ToroidalCurrent(eq=eq, target=1, grid=grid)
+    obj.build()
+    test(obj, curr, print_init=True, normalize=True, pass_f=True)
     pres = eq.compute("p", grid=grid)["p"]
     obj = Pressure(eq=eq, target=1, grid=grid)
     obj.build()
@@ -2561,10 +2881,15 @@ def test_plasma_vessel_distance_print(capsys):
     """Test that the PlasmaVesselDistance objective prints correctly."""
     pre_width = len("Maximum ")
 
-    def test(obj, eq, surface, d, print_init=False):
+    def test(obj, eq, surface, d, print_init=False, pass_f=False):
         if print_init:
             if isinstance(obj, ObjectiveFunction):
-                obj.print_value(obj.x(eq, surface), obj.x(eq, surface))
+                x = obj.x(eq, surface)
+                if not pass_f:
+                    obj.print_value(x, x0=x)
+                else:
+                    fse = obj.compute_scaled_error(x)
+                    obj.print_value(x, x0=x, fse=fse, f0se=fse)
                 print_fmt = (
                     f"{obj.objectives[0]._print_value_fmt:<{PRINT_WIDTH-pre_width}}"  # noqa: E501
                     + "{:10.3e}  -->  {:10.3e} "
@@ -2572,7 +2897,12 @@ def test_plasma_vessel_distance_print(capsys):
                 units = obj.objectives[0]._units
                 norm = obj.objectives[0].normalization
             else:
-                obj.print_value(obj.xs(eq, surface), obj.xs(eq, surface))
+                par = obj.xs(eq, surface)
+                if not pass_f:
+                    obj.print_value(args=par, args0=par)
+                else:
+                    fse = obj.compute_scaled_error(*par)
+                    obj.print_value(args=par, args0=par, fse=fse, f0se=fse)
                 print_fmt = (
                     f"{obj._print_value_fmt:<{PRINT_WIDTH-pre_width}}"
                     + "{:10.3e}  -->  {:10.3e} "
@@ -2581,7 +2911,12 @@ def test_plasma_vessel_distance_print(capsys):
                 norm = obj.normalization
         else:
             if isinstance(obj, ObjectiveFunction):
-                obj.print_value(obj.x(eq, surface))
+                x = obj.x(eq, surface)
+                if not pass_f:
+                    obj.print_value(x)
+                else:
+                    fse = obj.compute_scaled_error(x)
+                    obj.print_value(x, fse=fse)
                 print_fmt = (
                     f"{obj.objectives[0]._print_value_fmt:<{PRINT_WIDTH-pre_width}}"  # noqa: E501
                     + "{:10.3e} "
@@ -2589,7 +2924,12 @@ def test_plasma_vessel_distance_print(capsys):
                 units = obj.objectives[0]._units
                 norm = obj.objectives[0].normalization
             else:
-                obj.print_value(obj.xs(eq, surface))
+                par = obj.xs(eq, surface)
+                if not pass_f:
+                    obj.print_value(args=par)
+                else:
+                    fse = obj.compute_scaled_error(*par)
+                    obj.print_value(args=par, fse=fse)
                 print_fmt = (
                     f"{obj._print_value_fmt:<{PRINT_WIDTH-pre_width}}" + "{:10.3e} "
                 )
@@ -2661,7 +3001,9 @@ def test_plasma_vessel_distance_print(capsys):
     d = obj.compute_unscaled(*obj.xs(eq, surface))
     np.testing.assert_allclose(d, a_s - a_p)
     test(obj, eq, surface, d)
+    test(obj, eq, surface, d, pass_f=True)
     test(obj, eq, surface, d, print_init=True)
+    test(obj, eq, surface, d, print_init=True, pass_f=True)
 
     obj = ObjectiveFunction(
         PlasmaVesselDistance(
@@ -2671,7 +3013,9 @@ def test_plasma_vessel_distance_print(capsys):
     obj.build(verbose=0)
     d = obj.compute_unscaled(obj.x(eq, surface))
     test(obj, eq, surface, d)
+    test(obj, eq, surface, d, pass_f=True)
     test(obj, eq, surface, d, print_init=True)
+    test(obj, eq, surface, d, print_init=True, pass_f=True)
 
 
 @pytest.mark.unit
@@ -3084,18 +3428,18 @@ def test_objective_target_bounds():
     assert bounds[1][1] == 3 * asp.weight
     np.testing.assert_allclose(
         bounds[0][2:],
-        (-1 / fbl.normalization * fbl.weight * fbl.constants["quad_weights"]),
+        (-1 / fbl.normalization * fbl.weight * fbl._constants["quad_weights"]),
     )
     np.testing.assert_allclose(
         bounds[1][2:],
-        (2 / fbl.normalization * fbl.weight * fbl.constants["quad_weights"]),
+        (2 / fbl.normalization * fbl.weight * fbl._constants["quad_weights"]),
     )
 
     assert target[0] == 3 / vol.normalization * vol.weight
     assert target[1] == 2.5 * asp.weight
     np.testing.assert_allclose(
         target[2:],
-        (0.5 / fbl.normalization * fbl.weight * fbl.constants["quad_weights"]),
+        (0.5 / fbl.normalization * fbl.weight * fbl._constants["quad_weights"]),
     )
 
     assert weight[0] == 2
@@ -3162,13 +3506,12 @@ def test_loss_function_asserts():
 def _reduced_resolution_objective(eq, objective, **kwargs):
     """Speed up testing suite by defining rules to reduce objective resolution."""
     if objective in {EffectiveRipple, GammaC}:
-        kwargs["X"] = 8
-        kwargs["Y"] = 16
-        kwargs["num_transit"] = 4
-        kwargs["num_well"] = 15 * kwargs["num_transit"]
-        kwargs["num_pitch"] = 16
+        kwargs["X"] = 16
+        kwargs["Y"] = 24
+        kwargs["field_period_transits"] = 10
+        kwargs["num_well"] = 15 * kwargs["field_period_transits"] // eq.NFP
+        kwargs["num_pitch"] = 24
         kwargs["num_quad"] = 16
-        kwargs["jac_chunk_size"] = 1
     return objective(eq=eq, **kwargs)
 
 
@@ -3201,6 +3544,7 @@ class TestComputeScalarResolution:
         GenericObjective,
         HeatingPowerISS04,
         LinkingCurrentConsistency,
+        NeutronWallLoading,
         Omnigenity,
         PlasmaCoilSetDistanceBound,
         PlasmaCoilSetMinDistance,
@@ -3210,6 +3554,8 @@ class TestComputeScalarResolution:
         ToroidalFlux,
         SurfaceCurrentRegularization,
         VacuumBoundaryError,
+        # no grid dependence for DeflationOperator
+        DeflationOperator,
         # need to avoid blowup near the axis
         MercierStability,
         # we do not test these since they depend too much on what the user wants
@@ -3247,11 +3593,11 @@ class TestComputeScalarResolution:
     def test_compute_scalar_resolution_bootstrap(self):
         """BootstrapRedlConsistency."""
         eq = self.eq.copy()
+        eq.pressure = None
         eq.electron_density = PowerSeriesProfile([1e19, 0, -1e19])
         eq.electron_temperature = PowerSeriesProfile([1e3, 0, -1e3])
         eq.ion_temperature = PowerSeriesProfile([1e3, 0, -1e3])
         eq.atomic_number = 1.0
-
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
             grid = LinearGrid(
@@ -3268,6 +3614,8 @@ class TestComputeScalarResolution:
     def test_compute_scalar_resolution_fusion_power(self):
         """FusionPower."""
         eq = self.eq.copy()
+        eq.pressure = None
+
         eq.electron_density = PowerSeriesProfile([1e19, 0, -1e19])
         eq.electron_temperature = PowerSeriesProfile([1e3, 0, -1e3])
         eq.ion_temperature = PowerSeriesProfile([1e3, 0, -1e3])
@@ -3290,6 +3638,7 @@ class TestComputeScalarResolution:
     def test_compute_scalar_resolution_heating_power(self):
         """HeatingPowerISS04."""
         eq = self.eq.copy()
+        eq.pressure = None
         eq.electron_density = PowerSeriesProfile([1e19, 0, -1e19])
         eq.electron_temperature = PowerSeriesProfile([1e3, 0, -1e3])
         eq.ion_temperature = PowerSeriesProfile([1e3, 0, -1e3])
@@ -3307,6 +3656,39 @@ class TestComputeScalarResolution:
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+
+    @pytest.mark.regression
+    def test_compute_scalar_resolution_neutron_wall_loading(self):
+        """NeutronWallLoading."""
+        eq = get("reactor_QA")
+        f = np.zeros(4, dtype=float)
+        for i, res in enumerate([0.75, 1.0, 1.25, 1.5]):
+            source_grid = QuadratureGrid(
+                L=max(2, int(round(eq.L_grid * res))),
+                M=max(2, int(round(eq.M_grid * res))),
+                N=max(1, int(round(eq.N_grid * res))),
+                NFP=eq.NFP,
+            )
+            surface_grid = LinearGrid(
+                rho=1.0,
+                M=max(2, int(round(eq.M_grid * res))),
+                N=max(1, int(round(eq.N_grid * res))),
+                NFP=eq.NFP,
+                sym=False,
+                endpoint=True,
+            )
+            obj = ObjectiveFunction(
+                NeutronWallLoading(
+                    eq=eq,
+                    offset=0.1,
+                    source_grid=source_grid,
+                    surface_grid=surface_grid,
+                ),
+                use_jit=False,
+            )
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=6e-2)
 
     @pytest.mark.regression
     def test_compute_scalar_resolution_boundary_error(self):
@@ -3554,6 +3936,32 @@ class TestComputeScalarResolution:
         np.testing.assert_allclose(f, f[-1], rtol=2e-2)
 
     @pytest.mark.regression
+    def test_compute_scalar_resolution_DeflationOperator_ForceBalance(self):
+        """Deflated Force Balance."""
+        eq = self.eq.copy()
+        eq0 = self.eq.copy()
+        eq0.set_initial_guess()  # make eq0 different than self.eq
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            eq.change_resolution(
+                L_grid=int(self.eq.L * res),
+                M_grid=int(self.eq.M * res),
+                N_grid=int(self.eq.N * res),
+            )
+            obj = ObjectiveFunction(
+                DeflationOperator(
+                    thing=eq,
+                    things_to_deflate=[eq0],
+                    objective=ForceBalance(eq),
+                ),
+                use_jit=False,
+            )
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+
+        np.testing.assert_allclose(f, f[-1], rtol=4e-2)
+
+    @pytest.mark.regression
     def test_compute_scalar_resolution_omnigenity(self):
         """Omnigenity."""
         surf = FourierRZToroidalSurface.from_qp_model(
@@ -3631,11 +4039,15 @@ class TestComputeScalarResolution:
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
             obj = ObjectiveFunction(
-                objective(coilset, grid=LinearGrid(N=int(5 + 3 * res))),
+                objective(coilset, grid=LinearGrid(N=int(5 + 3 * res)), target=1),
                 use_jit=False,
             )
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
+
+        # verify obj.compute_scalar is not zero, so the resolution test is meaningful
+        assert not np.isclose(f[-1], 0, atol=1e-8)
+
         np.testing.assert_allclose(f, f[-1], rtol=1e-2, atol=1e-12)
 
     @pytest.mark.unit
@@ -3687,10 +4099,12 @@ class TestObjectiveNaNGrad:
         CoilTorsion,
         EffectiveRipple,
         ForceBalanceAnisotropic,
+        DeflationOperator,
         FusionPower,
         GammaC,
         HeatingPowerISS04,
         LinkingCurrentConsistency,
+        NeutronWallLoading,
         Omnigenity,
         PlasmaCoilSetDistanceBound,
         PlasmaCoilSetMinDistance,
@@ -3717,6 +4131,44 @@ class TestObjectiveNaNGrad:
         obj.build()
         g = obj.grad(obj.x(eq, surf))
         assert not np.any(np.isnan(g)), "plasma vessel distance"
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_DeflationOperator_ForceBalance(self):
+        """Deflation operator on force balance."""
+        eq = Equilibrium(
+            L=2,
+            M=2,
+            N=2,
+            surface=FourierRZToroidalSurface(
+                R_lmn=[10, 1], modes_R=[[0, 0], [1, 0]], Z_lmn=[-1], modes_Z=[[-1, 0]]
+            ),
+        )
+        eq2 = Equilibrium(
+            L=2,
+            M=2,
+            N=2,
+            surface=FourierRZToroidalSurface(
+                R_lmn=[11, 1], modes_R=[[0, 0], [1, 0]], Z_lmn=[-1], modes_Z=[[-1, 0]]
+            ),
+        )
+
+        obj = ObjectiveFunction(
+            DeflationOperator(eq, [eq2], objective=ForceBalance(eq)), use_jit=False
+        )
+        obj.build()
+        g = obj.grad(obj.x(eq))
+        assert not np.any(np.isnan(g)), "deflated force balance"
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_DeflationOperator(self):
+        """DeflationOperator."""
+        surf = FourierRZToroidalSurface()
+        surf2 = surf.copy()
+        surf.R_lmn = surf.R_lmn * 1.1
+        obj = ObjectiveFunction(DeflationOperator(surf, [surf2]), use_jit=False)
+        obj.build()
+        g = obj.grad(obj.x(surf))
+        assert not np.any(np.isnan(g)), "deflation operator"
 
     @pytest.mark.unit
     def test_objective_no_nangrad_anisotropy(self):
@@ -3774,6 +4226,39 @@ class TestObjectiveNaNGrad:
         obj.build()
         g = obj.grad(obj.x(eq))
         assert not np.any(np.isnan(g)), "heating power"
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_neutron_wall_loading(self):
+        """NeutronWallLoading."""
+        # Using half the resolution to speed up testing.
+        eq = get("reactor_QA")
+        source_grid = QuadratureGrid(
+            L=max(2, eq.L_grid // 2),
+            M=max(2, eq.M_grid // 2),
+            N=max(1, eq.N_grid // 2),
+            NFP=eq.NFP,
+        )
+        surface_grid = LinearGrid(
+            rho=1.0,
+            M=max(2, eq.M_grid // 2),
+            N=max(1, eq.N_grid // 2),
+            NFP=eq.NFP,
+            sym=False,
+            endpoint=True,
+        )
+        obj = ObjectiveFunction(
+            NeutronWallLoading(
+                eq=eq,
+                offset=0.1,
+                source_grid=source_grid,
+                surface_grid=surface_grid,
+                deriv_mode="rev",
+            ),
+            use_jit=False,
+        )
+        obj.build()
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g)), "neutron wall loading"
 
     @pytest.mark.unit
     def test_objective_no_nangrad_boundary_error(self):
@@ -3894,7 +4379,12 @@ class TestObjectiveNaNGrad:
         test([0, 0, -1])  # antiparallel
         test([0, 1e-4, 1])  # nearly parallel
         test([0, 1e-4, -1])  # nearly antiparallel
-
+        test([0, 1e-6, 1])  # nearly parallel
+        test([0, 1e-6, -1])  # nearly antiparallel
+        test([0, 1e-8, 1])  # nearly parallel
+        test([0, 1e-8, -1])  # nearly antiparallel
+        test([0, 1e-12, 1])  # nearly parallel
+        test([0, 1e-12, -1])  # nearly antiparallel
         # have use_jit=True here to check that runs correctly with spline
         # coils, see PR #1656
         obj = ObjectiveFunction(SurfaceQuadraticFlux(surf, ext_field), use_jit=True)
@@ -3979,17 +4469,18 @@ class TestObjectiveNaNGrad:
             NFP=1,
             sym=True,
         )
+
         eq = Equilibrium(Psi=6e-3, M=4, N=4, surface=surf)
         field = OmnigenousField(
-            L_B=0,
-            M_B=2,
+            L_B=1,
+            M_B=3,
             L_x=1,
             M_x=1,
             N_x=1,
             NFP=eq.NFP,
             helicity=helicity,
-            B_lm=np.array([0.8, 1.2]),
         )
+
         obj = ObjectiveFunction(Omnigenity(eq=eq, field=field))
         obj.build()
         g = obj.grad(obj.x())
@@ -4010,19 +4501,12 @@ class TestObjectiveNaNGrad:
         assert not np.any(np.isnan(g_0))
 
         obj = ObjectiveFunction(
-            _reduced_resolution_objective(eq, EffectiveRipple, nufft_eps=1e-7)
+            _reduced_resolution_objective(eq, EffectiveRipple, nufft_eps=1e-6)
         )
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
-        np.testing.assert_allclose(g, g_0, atol=1e-9)
-
-        obj = ObjectiveFunction(
-            _reduced_resolution_objective(eq, EffectiveRipple, use_bounce1d=True)
-        )
-        obj.build(verbose=0)
-        g = obj.grad(obj.x())
-        assert not np.any(np.isnan(g))
+        np.testing.assert_allclose(g, g_0, atol=1e-6)
 
     @pytest.mark.unit
     def test_objective_no_nangrad_Gamma_c(self):
@@ -4037,20 +4521,11 @@ class TestObjectiveNaNGrad:
         g_0 = obj_0.grad(obj_0.x())
         assert not np.any(np.isnan(g_0))
 
-        obj = ObjectiveFunction(
-            _reduced_resolution_objective(eq, GammaC, nufft_eps=1e-8)
-        )
+        obj = ObjectiveFunction(_reduced_resolution_objective(eq, GammaC))
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
-        np.testing.assert_allclose(g, g_0, atol=2e-7)
-
-        obj = ObjectiveFunction(
-            _reduced_resolution_objective(eq, GammaC, use_bounce1d=True)
-        )
-        obj.build(verbose=0)
-        g = obj.grad(obj.x())
-        assert not np.any(np.isnan(g))
+        np.testing.assert_allclose(g, g_0, atol=2e-5)
 
     @pytest.mark.unit
     def test_objective_no_nangrad_ballooning(self):
@@ -4193,3 +4668,388 @@ def test_nae_coefficients_asym():
             else np.where(bases["Rbasis_cos"].modes[:, 2] >= 0)
         )
         np.testing.assert_allclose(coefs[key][inds_asym], 0, err_msg=key, atol=1e-13)
+
+
+@pytest.mark.unit
+def test_deflation_operator_Nones():
+    """Test DeflationOperator when passing Nones and with different modes."""
+    surf = FourierRZToroidalSurface()
+    surf2 = surf.copy()
+    surf.R_lmn = surf.R_lmn * 1.1
+    surf3 = surf.copy()
+    surf3.R_lmn = surf3.R_lmn * 1.2
+    things_to_deflate_with_None = [surf2, surf3, None]
+
+    obj1 = ObjectiveFunction(
+        DeflationOperator(
+            surf,
+            [surf2, surf3],
+            sigma=1.0,
+            multiple_deflation_type="sum",
+            params_to_deflate_with={"R_lmn": True},
+        ),
+        use_jit=False,
+    )
+    obj1.build()
+    obj2 = ObjectiveFunction(
+        DeflationOperator(
+            surf,
+            things_to_deflate_with_None,
+            sigma=1.0,
+            multiple_deflation_type="sum",
+            params_to_deflate_with={"R_lmn": True},
+        ),
+        use_jit=False,
+    )
+    obj2.build()
+    val1 = obj1.compute_scalar(obj1.x(surf))
+    val2 = obj2.compute_scalar(obj2.x(surf))
+
+    correct_value = (
+        np.sum(
+            [1 / np.linalg.norm(surf.R_lmn - s.R_lmn) ** 2 + 1 for s in [surf2, surf3]]
+        )
+        ** 2
+        / 2
+    )
+
+    # make sure values are identical and correct
+    np.testing.assert_allclose(val1, val2)
+    np.testing.assert_allclose(val1, correct_value)
+    # make sure that the objective did not modify the original list
+    assert things_to_deflate_with_None[0] == surf2
+    assert things_to_deflate_with_None[1] == surf3
+    assert things_to_deflate_with_None[2] is None
+
+    ## same thing but using exponential
+    obj1 = ObjectiveFunction(
+        DeflationOperator(
+            surf,
+            [surf2, surf3],
+            sigma=1.0,
+            deflation_type="exp",
+            multiple_deflation_type="sum",
+            params_to_deflate_with={"R_lmn": True},
+            single_shift=True,
+        ),
+        use_jit=False,
+    )
+    obj1.build()
+    obj2 = ObjectiveFunction(
+        DeflationOperator(
+            surf,
+            things_to_deflate_with_None,
+            sigma=1.0,
+            deflation_type="exp",
+            multiple_deflation_type="sum",
+            params_to_deflate_with={"R_lmn": True},
+            single_shift=True,
+        ),
+        use_jit=False,
+    )
+    obj2.build()
+    val1 = obj1.compute_scalar(obj1.x(surf))
+    val2 = obj2.compute_scalar(obj2.x(surf))
+
+    correct_value = (
+        np.sum(
+            [np.exp(1 / np.linalg.norm(surf.R_lmn - s.R_lmn)) for s in [surf2, surf3]]
+        )
+        + 1
+    ) ** 2 / 2
+
+    # make sure values are identical and correct
+    np.testing.assert_allclose(val1, val2)
+    np.testing.assert_allclose(val1, correct_value)
+    # make sure that the objective did not modify the original list
+    assert things_to_deflate_with_None[0] == surf2
+    assert things_to_deflate_with_None[1] == surf3
+    assert things_to_deflate_with_None[2] is None
+
+    obj2 = ObjectiveFunction(
+        DeflationOperator(
+            surf,
+            things_to_deflate_with_None,
+            sigma=1.0,
+            deflation_type="exp",
+            multiple_deflation_type="sum",
+            params_to_deflate_with={"R_lmn": True},
+            single_shift=True,
+            bounds=(2, 3),
+        ),
+        use_jit=False,
+    )
+    # min value is 1.0, but lowest bound is 2.0 so raise error
+    with pytest.raises(ValueError, match="lower"):
+        obj2.build()
+    obj2 = ObjectiveFunction(
+        DeflationOperator(
+            surf,
+            things_to_deflate_with_None,
+            sigma=1.0,
+            deflation_type="exp",
+            multiple_deflation_type="sum",
+            params_to_deflate_with={"R_lmn": True},
+            single_shift=False,
+            bounds=(2.5, 3),
+        ),
+        use_jit=False,
+    )
+    # min value is 1.0 * # things not none = 2.0,
+    # but lowest bound is 2.5 so raise error
+    with pytest.raises(ValueError, match="lower"):
+        obj2.build()
+
+
+@pytest.mark.unit
+def test_deflation_operator_all_Nones():
+    """Test DeflationOperator when passing all Nones."""
+    surf = FourierRZToroidalSurface()
+    things_to_deflate_with_None = [None, None, None]
+
+    obj1 = ObjectiveFunction(
+        DeflationOperator(
+            surf,
+            things_to_deflate_with_None,
+            sigma=1.0,
+            multiple_deflation_type="sum",
+            params_to_deflate_with={"R_lmn": True},
+        ),
+        use_jit=False,
+    )
+    obj1.build()
+    sub_obj = GenericObjective(
+        "R", surf, target=0, grid=LinearGrid(rho=1.0, theta=0.0, zeta=0.0)
+    )
+    obj2 = ObjectiveFunction(
+        DeflationOperator(
+            surf,
+            things_to_deflate_with_None,
+            sigma=1.0,
+            multiple_deflation_type="prod",
+            params_to_deflate_with={"R_lmn": True},
+            objective=sub_obj,
+        ),
+        use_jit=False,
+    )
+    obj2.build()
+    val1 = obj1.compute_unscaled(obj1.x(surf))
+    val2 = obj2.compute_unscaled(obj2.x(surf))
+
+    # make sure values are identical and correct
+    # non-wrapped deflation operator with all Nones should return 0.0
+    np.testing.assert_allclose(val1, 0.0)
+    # wrapped deflation operator should return the sub-objective value untouched
+    np.testing.assert_allclose(
+        val2,
+        surf.compute("R", grid=LinearGrid(rho=1.0, theta=0.0, zeta=0.0))["R"].squeeze(),
+    )
+
+
+@pytest.mark.unit
+def test_coil_objective_input(DummyMixedCoilSet):
+    """Tests broadcasting for inputs to _CoilObjectives."""
+    # Consists of [coilset with 1 coil, coilset with 3 coils, single coil, single coil]
+    coilset = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
+
+    weight = [1.0, 2.0, 3.0, 4.0]
+    weight_np = np.asarray(weight)
+    weight_expanded = [1.0, 2.0, 2.0, 2.0, 3.0, 4.0]
+    bounds = ([0.0, 1.0, 2.0, 3.0], [4.0, [5.0, 6.0, 7.0], 8.0, 9.0])
+    bounds_expanded = ([0.0, 1.0, 1.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0, 8.0, 9.0])
+    target = [[4.0], 5.0, 8.0, 9.0]
+    target_expanded = [4.0, 5.0, 5.0, 5.0, 8.0, 9.0]
+
+    obj = CoilLength(coilset, bounds=bounds, weight=weight)
+    obj.build()
+    np.testing.assert_allclose(obj.bounds[0], bounds_expanded[0], atol=1e-13)
+    np.testing.assert_allclose(obj.bounds[1], bounds_expanded[1], atol=1e-13)
+    np.testing.assert_allclose(obj.weight, weight_expanded, atol=1e-13)
+    obj_weight_1 = obj.weight
+    # test list vs. np array input
+    obj = CoilLength(coilset, bounds=bounds, weight=weight_np)
+    obj.build()
+    np.testing.assert_allclose(obj.weight, obj_weight_1, atol=1e-13)
+
+    obj = CoilLength(coilset, target=target)
+    obj.build()
+    np.testing.assert_allclose(obj._target, target_expanded, atol=1e-13)
+
+    obj = CoilLength(coilset, bounds=(1, 2), weight=1)
+    obj.build()
+    assert np.size(obj._bounds[0]) == 1 and np.size(obj._bounds[1]) == 1
+    assert np.size(obj._weight) == 1
+
+    weight = [0.0, 2.0, 3.0, 4.0]
+    obj = CoilCurvature(coilset, bounds=bounds, weight=weight)
+    obj.build()
+
+
+@pytest.mark.unit
+def test_coil_objective_indices(DummyMixedCoilSet):
+    """Tests that "weights" with zeros correctly masks _CoilObjectives errors."""
+    # Consists of [coilset with 1 coil, coilset with 3 coils, single coil, single coil]
+    coilsetA = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
+    # Consists of [single coil, single coil, single coil]
+    coilsetB = MixedCoilSet((coilsetA[1][1], coilsetA[2], coilsetA[3]))
+
+    weight = [0, [1, 0, 0], 1, 1]
+    objA = CoilLength(coilsetA, weight=weight, normalize=False)
+    objB = CoilLength(coilsetB, normalize=False)
+    objA.build()
+    objB.build()
+    compA = objA.compute_scaled_error(None)
+    compB = objB.compute_scaled_error(None)
+    np.testing.assert_allclose(compA, compB, atol=1e-13)
+    assert objA.dim_f == 3
+
+    objC = CoilCurvature(coilsetA, weight=weight, normalize=False)
+    objD = CoilCurvature(coilsetB, normalize=False)
+    objC.build()
+    objD.build()
+    compC = objC.compute_scaled_error(None)
+    compD = objD.compute_scaled_error(None)
+    np.testing.assert_allclose(compC, compD, atol=1e-13)
+    assert objC.dim_f == objD.dim_f
+
+    objE = CoilTorsion(coilsetA, weight=weight, normalize=False)
+    objF = CoilTorsion(coilsetB, normalize=False)
+    objE.build()
+    objF.build()
+    compE = objE.compute_scaled_error(None)
+    compF = objF.compute_scaled_error(None)
+    np.testing.assert_allclose(compE, compF, atol=1e-13)
+    assert objE.dim_f == objF.dim_f
+
+
+@pytest.mark.unit
+def test_coil_objective_setter(DummyMixedCoilSet):
+    """Tests setters for _CoilObjectives."""
+    # Consists of [coilset with 1 coil, coilset with 3 coils, single coil, single coil]
+    coilsetA = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
+    # Consists of [coilset with 1 coil, coilset with 3 coils]
+    coilsetB = MixedCoilSet((coilsetA[0], coilsetA[1]), check_intersection=False)
+
+    objA = CoilLength(coilsetA)
+    objB = CoilLength(coilsetB)
+
+    weightA = [1.0, 2.0, 0.0, 0.0]
+    weightB = [1.0, 2.0]
+    weightAB_expanded = [1.0, 2.0, 2.0, 2.0]
+    objA.weight = weightA
+    objB.weight = weightB
+    objA.build()
+    objB.build()
+    np.testing.assert_allclose(objA.weight, objB.weight, atol=1e-13)
+    np.testing.assert_allclose(objA.weight, weightAB_expanded, atol=1e-13)
+
+    bounds = ([0.0, 1.0, 2.0, 3.0], [[4.0], [5.0, 6.0, 7.0], 8.0, 9.0])
+    bounds_expanded = ([0.0, 1.0, 1.0, 1.0], [4.0, 5.0, 6.0, 7.0])
+    target = [[4.0], 5.0, 8.0, 9.0]
+    target_expanded = [4.0, 5.0, 5.0, 5.0]
+
+    objA.bounds = bounds
+    np.testing.assert_allclose(objA.bounds[0], bounds_expanded[0], atol=1e-13)
+    np.testing.assert_allclose(objA.bounds[1], bounds_expanded[1], atol=1e-13)
+
+    objA.bounds = None
+    objA.target = target
+    np.testing.assert_allclose(objA.target, target_expanded, atol=1e-13)
+
+    objC = CoilCurvature(coilsetA)
+    objD = CoilCurvature(coilsetB)
+
+    objC.weight = weightA
+    objD.weight = weightB
+    objC.build()
+    objD.build()
+    objC.bounds = bounds
+    objC.target = target
+    num_nodes = len(objD.weight)
+    np.testing.assert_allclose(objC.weight, objD.weight, atol=1e-13)
+
+    assert len(objC.weight) == num_nodes
+    assert len(objC.bounds[0]) == num_nodes
+    assert len(objC.target) == num_nodes
+
+
+@pytest.mark.unit
+def test_objective_use_jit():
+    """Test that use_jit is passed correctly to sub-objectives."""
+
+    class DummyObj(_Objective):
+        def __init__(self, eq):
+            super().__init__(things=eq)
+
+        def build(self, use_jit, verbose=3):
+            self._dim_f = 1
+            super().build(use_jit=use_jit, verbose=verbose)
+
+        def compute(self, params, constants=None):
+            R = params["R_lmn"][0]
+            return R * 2 if R > 0 else R * 3
+
+    eq = get("DSHAPE")
+
+    obj1 = DummyObj(eq)
+    obj1.build(use_jit=False)
+    obj = ObjectiveFunction(obj1)
+    with pytest.warns(UserWarning, match="has use_jit=False"):
+        obj.build(use_jit=True)
+
+    rs = [-2, 4]
+    for r in rs:
+        eq.R_lmn[0] = r
+        f = obj.compute_scalar(obj.x(eq))
+        g = obj.grad(obj.x(eq))
+
+        assert f == 2 * r**2 if r > 0 else 9 * r**2 / 2
+        assert g[0] == 4 * r if r > 0 else 9 * r
+        assert np.all(g[1:] == 0)
+
+
+@pytest.mark.unit
+def test_jax_static_attrs():
+    """Test that jax arrays in _static_attrs handled correctly."""
+
+    class DummyObj(_Objective):
+        _static_attrs = _Objective._static_attrs + ["_arr"]
+
+        def __init__(self, eq, arr):
+            self._arr = arr
+            super().__init__(things=[eq])
+
+        def build(self, use_jit=True, verbose=3):
+            self._dim_f = 1
+            super().build(use_jit=use_jit, verbose=verbose)
+
+        def compute(self, params, constants=None):
+            return params["Psi"] * jnp.sum(self._arr)
+
+    eq = get("precise_QA")
+    obj = DummyObj(eq, arr=jnp.arange(3))
+    obj.build()
+    # obj._arr stays as jax array until it is flattened by a jit
+    # compiled function
+    assert isinstance(obj._arr, jax.Array)
+    with pytest.warns(UserWarning, match="Detected jax array"):
+        _ = obj.compute_scaled_error(*obj.xs(eq))
+    # once a compiled function is called, the attribute should become
+    # a numpy array to prevent future warnings
+    assert isinstance(obj._arr, np.ndarray)
+
+
+@pytest.mark.unit
+def test_deprecated_constants():
+    """Test that using deprecated constants raises a warning."""
+    eq = get("DSHAPE")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(L=1, M=1, L_grid=2, M_grid=2)
+    obj = ForceBalance(eq)
+    obj.build()
+    with pytest.warns(FutureWarning, match="constants is deprecated"):
+        _ = obj.compute_scaled_error(*obj.xs(), constants=obj.constants)
+    obj = ObjectiveFunction(obj)
+    obj.build()
+    with pytest.warns(FutureWarning, match="constants is deprecated"):
+        _ = obj.compute_scaled_error(obj.x(), constants=obj.constants)

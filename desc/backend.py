@@ -6,18 +6,19 @@ import warnings
 
 import numpy as np
 from packaging.version import Version
-from termcolor import colored
 
 import desc
 from desc import config as desc_config
 from desc import set_device
+
+OMEGA_IS_0 = True
 
 if os.environ.get("DESC_BACKEND") == "numpy":
     jnp = np
     use_jax = False
     set_device(kind="cpu")
 else:
-    if desc_config.get("device") is None:
+    if desc_config.get("kind") is None:
         set_device("cpu")
     try:
         with warnings.catch_warnings():
@@ -27,6 +28,20 @@ else:
             import jaxlib
             from jax import config as jax_config
 
+            # YNNPACK reduce fusions on CPU is slow and wrong,
+            # see (https://github.com/jax-ml/jax/issues/41414).
+            # Triton GEMMs on GPU cause slow compilation without much
+            # performance gain. Keep user flags, update others if not set.
+            if Version(jax.__version__) >= Version("0.10.0"):
+                _xla_flags = os.environ.get("XLA_FLAGS", "")
+                for _flag in [
+                    "--xla_cpu_experimental_ynn_fusion_type=-reduce",
+                    "--xla_gpu_enable_triton_gemm=false",
+                ]:
+                    if _flag.split("=")[0] not in _xla_flags:
+                        _xla_flags += " " + _flag
+                os.environ["XLA_FLAGS"] = _xla_flags.strip()
+
             jax_config.update("jax_enable_x64", True)
             if desc_config.get("kind") == "gpu" and len(jax.devices("gpu")) == 0:
                 warnings.warn(
@@ -34,16 +49,20 @@ else:
                     + "installed JAX with GPU support?"
                 )
                 set_device("cpu")
-            x = jnp.linspace(0, 5)
+            if desc_config.get("kind") == "tpu":
+                desc_config["avail_mem"] = (
+                    jax.devices("tpu")[0].memory_stats()["bytes_limit"] / 1024**3
+                )
+            x = jnp.linspace(0, 5, 2)
             y = jnp.exp(x)
         use_jax = True
     except ModuleNotFoundError:
         jnp = np
-        x = jnp.linspace(0, 5)
+        x = jnp.linspace(0, 5, 2)
         y = jnp.exp(x)
         use_jax = False
         set_device(kind="cpu")
-        warnings.warn(colored("Failed to load JAX", "red"))
+        warnings.warn("Failed to load JAX", "red")
 
 
 def print_backend_info():
@@ -83,11 +102,139 @@ if use_jax:  # noqa: C901
     from jax.nn import softmax as softargmax
     from jax.numpy import bincount, flatnonzero, repeat, take
     from jax.numpy.fft import ifft, irfft, irfft2, rfft, rfft2
-    from jax.scipy.fft import dct, idct
+    from jax.scipy.fft import dct, dctn, idct, idctn
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
+
+    # TODO: remove fallback once JAX implementation performs better
+    if Version(jax.__version__) >= Version("0.13.0"):
+        from jax.scipy.linalg import qr_multiply
+    else:
+        # Implements `jax.scipy.linalg.qr_multiply` without the ``ormqr`` primitive
+        # (which requires a jaxlib rebuild), so it runs on any installed jaxlib. The
+        # Householder reflectors ``Q`` are applied to ``c`` via the blocked CWY/UT
+        # transform of Puglisi (1992) and Joffrain & Low (2006) without ever forming
+        # ``Q``, on large tall systems this beats forming ``Q`` (``orgqr``) and, on GPU,
+        # cuSOLVER's ``ormqr``.
+
+        # Ported from https://github.com/jax-ml/jax/pull/36575. The `DotAlgorithmPreset`
+        # used there only mattered for float32 throughput, which DESC does not use, so
+        # plain matmuls are used here. Block sizes are the upstream A100-tuned values.
+
+        def _householder_multiply(at, taus, c, *, transpose=False, offset=0):
+            """Apply reflectors in ``at``/``taus`` to ``c`` from the left, one block.
+
+            ``at`` holds the reflectors as rows, ie ``V.T``.
+
+            Forms ``Q = I - V T^{-1} V^H`` via the identity ``T^{-1} + T^{-H} = V^H V``,
+            recovering the triangular ``T^{-1}`` by correcting the diagonal. ``offset``
+            is the row of ``V`` the block's diagonal starts on; rows above it are
+            zeroed, so they leave ``c`` untouched.
+            """
+            k, m = at.shape
+            # V is unit lower-trapezoidal, so V.T is unit upper-trapezoidal.
+            below = jnp.arange(m)[None, :] - (offset + jnp.arange(k)[:, None])
+            Vt = jnp.where(below > 0, at, (below == 0).astype(at.dtype))
+            Vh = Vt.conj()
+            diag_correction = (1 / taus) if transpose else (1 / taus).conj()
+            diag_correction = jnp.expand_dims(diag_correction, -1) * jnp.eye(
+                k, dtype=at.dtype
+            )
+            # solve_triangular reads only the relevant triangle, so passing the full
+            # Gram matrix V^H V (minus the diagonal correction) recovers T^{-1}.
+            T_inv = Vh @ Vt.swapaxes(-1, -2) - diag_correction
+            z = solve_triangular(T_inv, Vh @ c, lower=transpose)
+            with jax.default_matmul_precision("highest"):
+                return c - Vt.swapaxes(-1, -2) @ z
+
+        def _blocked_householder_multiply(at, taus, c, *, left, transpose):
+            """Apply Q (or Q^H) to c in blocks (block sizes tuned on A100).
+
+            ``at`` is ``V.T``, ie the reflectors as rows.
+            """
+            if not left:  # c @ Q == (Q^H @ c^H)^H
+                ct = c.conj().swapaxes(-1, -2)
+                out = _blocked_householder_multiply(
+                    at, taus, ct, left=True, transpose=not transpose
+                )
+                return out.conj().swapaxes(-1, -2)
+
+            if at.ndim > 2:  # batch dims via vmap, keep the core logic 2-D
+                fn = functools.partial(
+                    _blocked_householder_multiply, left=True, transpose=transpose
+                )
+                return vmap(fn)(at, taus, c)
+
+            m = at.shape[-1]
+            k = taus.shape[0]
+            if k == 0:  # no reflectors -> Q is the identity
+                return c
+            # Balances the per-block V^H V cost against the number of sequential blocks.
+            esize = at.dtype.itemsize
+            hi_limit = 4096 * max(1, 8 // esize)
+            mid_limit = 4096 * esize
+            nb = min(k, 256 if m <= hi_limit else 128 if m <= mid_limit else 64)
+
+            # Each block spans all m rows (rows above its diagonal are masked in
+            # _householder_multiply), all full blocks share one shape and are scanned.
+            def block(c, j0, width):
+                return _householder_multiply(
+                    jax.lax.dynamic_slice(at, (j0, 0), (width, m)),
+                    jax.lax.dynamic_slice(taus, (j0,), (width,)),
+                    c,
+                    transpose=transpose,
+                    offset=j0,
+                )
+
+            n_full, tail = divmod(k, nb)
+            body = lambda c, i: (block(c, i * nb, nb), None)
+            if transpose:  # forward over the blocks, short tail last
+                c, _ = scan(body, c, jnp.arange(n_full))
+                c = block(c, n_full * nb, tail) if tail else c
+            else:
+                c = block(c, n_full * nb, tail) if tail else c
+                c, _ = scan(body, c, jnp.arange(n_full), reverse=True)
+            return c
+
+        @functools.partial(jit, static_argnames="mode")
+        def qr_multiply(a, c, mode="right"):
+            """Pure-JAX drop-in for ``jax.scipy.linalg.qr_multiply``; returns `(CQ, R)`.
+
+            ``a = Q @ R`` is the (economic) QR factorization. For ``mode="right"``
+            returns ``c @ Q`` (with 1-D ``c`` treated as a length-``M`` row vector); for
+            ``mode="left"`` returns ``Q @ c``. ``R`` has shape ``(min(M, N), N)``.
+            """
+            m, n = a.shape
+            k = min(m, n)
+            # mode="raw" returns the packed reflectors (transposed) plus tau factors,
+            # via the existing geqrf primitive -- no new primitive / jaxlib rebuild.
+            # h is (N, M): h.T has R on and above the diagonal, the reflectors below.
+            h, taus = jnp.linalg.qr(a, mode="raw")
+            R = jnp.triu(h[:, :k].swapaxes(-1, -2))
+            # When m <= n geqrf's last reflector (row m-1) is the identity (tau == 0).
+            # Drop it statically -- the economic Q is unchanged and we avoid 1/0.
+            n_refl = k - 1 if m <= n else k
+            Vt = h[:n_refl]
+            taus = taus[:n_refl]
+            c1d = c.ndim == 1
+
+            if mode == "right":
+                cq = _blocked_householder_multiply(
+                    Vt, taus, c[None, :] if c1d else c, left=False, transpose=False
+                )
+                cq = cq[:, :k]  # economic Q has min(M, N) columns
+                return (cq[0] if c1d else cq), R
+
+            C = c[:, None] if c1d else c
+            pad = jnp.zeros((m - k, C.shape[1]), C.dtype)
+            cq = _blocked_householder_multiply(
+                Vt, taus, jnp.vstack([C, pad]), left=True, transpose=False
+            )
+            return (cq[:, 0] if c1d else cq), R
+
     from jax.scipy.special import gammaln
     from jax.tree_util import (
         register_pytree_node,
+        tree_broadcast,
         tree_flatten,
         tree_leaves,
         tree_map,
@@ -529,13 +676,14 @@ else:  # pragma: no cover
     execute_on_cpu = lambda func: func
     import scipy.optimize
     from numpy.fft import ifft, irfft, irfft2, rfft, rfft2  # noqa: F401
-    from scipy.fft import dct, idct  # noqa: F401
+    from scipy.fft import dct, dctn, idct, idctn  # noqa: F401
     from scipy.integrate import odeint  # noqa: F401
     from scipy.linalg import (  # noqa: F401
         block_diag,
         cho_factor,
         cho_solve,
         qr,
+        qr_multiply,
         solve_triangular,
     )
     from scipy.special import gammaln  # noqa: F401
@@ -620,6 +768,10 @@ else:  # pragma: no cover
 
     def treedef_is_leaf(*args, **kwargs):
         """Check is leaf of pytree for numpy backend."""
+        raise NotImplementedError
+
+    def tree_broadcast(*args, **kwargs):
+        """Broadcast pytree for numpy backend."""
         raise NotImplementedError
 
     def register_pytree_node(foo, *args):

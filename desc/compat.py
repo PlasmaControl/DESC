@@ -8,6 +8,16 @@ from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.profiles import FourierZernikeProfile, PowerSeriesProfile, SplineProfile
 from desc.utils import errorif, setdefault, warnif
 
+__all__ = [
+    "contract_equilibrium",
+    "ensure_positive_jacobian",
+    "flip_helicity",
+    "flip_magnetic_field",
+    "flip_theta",
+    "rescale",
+    "rotate_zeta",
+]
+
 
 def ensure_positive_jacobian(eq):
     """Convert an Equilibrium to have a positive coordinate Jacobian.
@@ -21,6 +31,8 @@ def ensure_positive_jacobian(eq):
     -------
     eq : Equilibrium or iterable of Equilibrium
         Same as input, but with coefficients adjusted to give right-handed coordinates.
+        Note that this may change the iota/current profile type and its number of
+        optimizable parameters.
 
     """
     # maybe it's iterable:
@@ -43,9 +55,9 @@ def ensure_positive_jacobian(eq):
         )
 
         if eq.iota is not None:
-            eq.i_l *= -1
+            eq.iota *= -1
         else:
-            eq.c_l *= -1
+            eq.current *= -1
 
         rone = np.ones_like(eq.R_lmn)
         rone[eq.R_basis.modes[:, 1] < 0] *= -1
@@ -80,7 +92,8 @@ def flip_helicity(eq):
     Returns
     -------
     eq : Equilibrium or iterable of Equilibrium
-        Same as input, but with the opposite sign helicity.
+        Same as input, but with the opposite sign helicity. Note that this may
+        change the iota/current profile type and its number of optimizable parameters.
 
     """
     # maybe it's iterable:
@@ -89,10 +102,17 @@ def flip_helicity(eq):
             flip_helicity(e)
         return eq
 
+    warnif(
+        hasattr(eq.surface, "Phi_mn"),
+        UserWarning,
+        "The Equilibrium has a sheet current, "
+        "which may not be handled correctly by flip_helicity.",
+    )
+
     if eq.iota is not None:
-        eq.i_l *= -1
+        eq.iota *= -1
     else:
-        eq.c_l *= -1
+        eq.current *= -1
 
     rone = np.ones_like(eq.R_lmn)
     rone[eq.R_basis.modes[:, 2] < 0] *= -1
@@ -108,6 +128,42 @@ def flip_helicity(eq):
 
     eq.axis = eq.get_axis()
     eq.surface = eq.get_surface_at(rho=1)
+
+    return eq
+
+
+def flip_magnetic_field(eq):
+    """Reverse the direction of the magnetic field.
+
+    Parameters
+    ----------
+    eq : Equilibrium or iterable of Equilibrium
+        Equilibria to flip the magnetic field of.
+
+    Returns
+    -------
+    eq : Equilibrium or iterable of Equilibrium
+        Same as input, but with the reverse direction magnetic field. Note that this may
+        change the current profile type and its number of optimizable parameters.
+
+    """
+    # maybe it's iterable:
+    if hasattr(eq, "__len__"):
+        for e in eq:
+            flip_magnetic_field(e)
+        return eq
+
+    warnif(
+        hasattr(eq.surface, "Phi_mn"),
+        UserWarning,
+        "The Equilibrium has a sheet current, "
+        "which may not be handled correctly by flip_magnetic_field.",
+    )
+
+    eq.Psi *= -1
+
+    if eq.current is not None:
+        eq.current *= -1
 
     return eq
 
@@ -133,6 +189,13 @@ def flip_theta(eq):
         for e in eq:
             flip_theta(e)
         return eq
+
+    warnif(
+        hasattr(eq.surface, "Phi_mn"),
+        UserWarning,
+        "The Equilibrium has a sheet current, "
+        "which may not be handled correctly by flip_theta.",
+    )
 
     rone = np.ones_like(eq.R_lmn)
     rone[eq.R_basis.modes[:, 1] % 2 == 1] *= -1
@@ -179,9 +242,10 @@ def rescale(
     Returns
     -------
     eq : Equilibrium or iterable of Equilibrium
-        Same as input, but rescaled to the desired size and magnetic field strength.
-        The profiles will now be ``ScaledProfile` classes, with the ``scale`` being
-        the rescaling parameter computed in this function.
+        Equilibrium input rescaled to the desired size and magnetic field strength.
+        The current profile (but not iota) is multiplied by a constant, as are the
+        pressure or kinetic profiles if scale_pressure is True. Note that this may
+        change the profile types and their number of optimizable parameters.
 
     """
     # maybe it's iterable:
@@ -189,6 +253,13 @@ def rescale(
         for e in eq:
             rescale(e, L, B)
         return eq
+
+    warnif(
+        hasattr(eq.surface, "Phi_mn"),
+        UserWarning,
+        "The Equilibrium has a sheet current, "
+        "which may not be handled correctly by rescale.",
+    )
 
     assert len(L) == 2
     assert len(B) == 2
@@ -252,9 +323,11 @@ def rescale(
         if eq.pressure is not None:
             eq.pressure *= cB**2
         else:
-            eq.electron_density *= cB
             eq.electron_temperature *= cB
+            eq.electron_density *= cB
             eq.ion_temperature *= cB
+            if eq.ion_density is not None:
+                eq.ion_density *= cB
 
     # scale current profile
     if eq.current is not None:
@@ -285,7 +358,15 @@ def rotate_zeta(eq, angle, copy=False):
     -------
     eq_rotated : Equilibrium
         Equilibrium rotated about the toroidal direction
+
     """
+    warnif(
+        hasattr(eq.surface, "Phi_mn"),
+        UserWarning,
+        "The Equilibrium has a sheet current, "
+        "which may not be handled correctly by rotate_zeta.",
+    )
+
     eq_rotated = eq.copy() if copy else eq
     # We will apply the rotation in NFP domain
     angle = angle * eq.NFP
@@ -367,9 +448,10 @@ def contract_equilibrium(
     Returns
     -------
     eq_inner: New Equilibrium object, contracted from the old one such that
-        eq.pressure(rho=inner_rho) = eq_inner.pressure(rho=1), and
-        eq_inner LCFS = eq's rho=inner_rho surface.
-        Note that this will not be in force balance, and so must be re-solved.
+        eq.pressure(rho=inner_rho) = eq_inner.pressure(rho=1), and eq_inner LCFS = eq's
+        rho=inner_rho surface. Note that this may change the profile types and their
+        number of optimizable parameters. Note that this will not be in force balance,
+        and so must be re-solved.
 
     """
     errorif(
@@ -377,6 +459,13 @@ def contract_equilibrium(
         ValueError,
         f"Surface must be in the range 0 < inner_rho < 1, instead got {inner_rho}.",
     )
+    warnif(
+        hasattr(eq.surface, "Phi_mn"),
+        UserWarning,
+        "The Equilibrium has a sheet current, "
+        "which may not be handled correctly by contract_equilibrium.",
+    )
+
     profile_num_points = setdefault(profile_num_points, eq.L_grid)
 
     def scale_profile(profile, rho):
@@ -391,8 +480,7 @@ def contract_equilibrium(
         if contract_profiles and is_power_series:
             # only PowerSeriesProfile both
             # a) has a from_values
-            # b) can safely use that from_values to represent a
-            #    subset of itself.
+            # b) can safely use that from_values to represent a subset of itself
             x = np.linspace(0, 1, profile_num_points)
             grid = LinearGrid(rho=x / rho)
             y = profile.compute(grid)
@@ -418,6 +506,7 @@ def contract_equilibrium(
     current = scale_profile(eq.current, inner_rho)
     electron_density = scale_profile(eq.electron_density, inner_rho)
     electron_temperature = scale_profile(eq.electron_temperature, inner_rho)
+    ion_density = scale_profile(eq.ion_density, inner_rho)
     ion_temperature = scale_profile(eq.ion_temperature, inner_rho)
     atomic_number = scale_profile(eq.atomic_number, inner_rho)
     anisotropy = scale_profile(eq.anisotropy, inner_rho)
@@ -433,6 +522,7 @@ def contract_equilibrium(
         current=current,
         electron_density=electron_density,
         electron_temperature=electron_temperature,
+        ion_density=ion_density,
         ion_temperature=ion_temperature,
         atomic_number=atomic_number,
         anisotropy=anisotropy,

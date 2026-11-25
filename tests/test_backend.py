@@ -3,7 +3,19 @@
 import numpy as np
 import pytest
 
-from desc.backend import _lstsq, jax, jnp, put, root, root_scalar, sign, vmap
+from desc.backend import (
+    _lstsq,
+    jax,
+    jnp,
+    put,
+    qr,
+    qr_multiply,
+    root,
+    root_scalar,
+    sign,
+    solve_triangular,
+    vmap,
+)
 
 
 @pytest.mark.unit
@@ -140,3 +152,108 @@ def test_lstsq():
     np.testing.assert_allclose(
         _lstsq(A, b), np.linalg.lstsq(A, b, rcond=None)[0], rtol=1e-6
     )
+
+
+@pytest.mark.unit
+def test_set_device_gpu_uuid(monkeypatch):
+    """Test set_device("gpu") with a GPU UUID or prefix in CUDA_VISIBLE_DEVICES."""
+    import pynvml
+
+    import desc
+
+    uuids = ["GPU-0d1c6a5e-26f4-4b4c-9a51-3a2e1b7c8d90", "GPU-8f3e2d1c-0b9a-4f8e-8d7c"]
+    mem = type("Memory", (), {"total": 1, "used": 0})
+    monkeypatch.setattr(pynvml, "nvmlInit", lambda: None)
+    monkeypatch.setattr(pynvml, "nvmlShutdown", lambda: None)
+    monkeypatch.setattr(pynvml, "nvmlDeviceGetCount", lambda: 2)
+    monkeypatch.setattr(pynvml, "nvmlDeviceGetHandleByIndex", lambda i: i)
+    monkeypatch.setattr(pynvml, "nvmlDeviceGetUUID", lambda h: uuids[h])
+    monkeypatch.setattr(pynvml, "nvmlDeviceGetMemoryInfo", lambda h, version: mem)
+    monkeypatch.setattr(pynvml, "nvmlDeviceGetName", lambda h: f"GPU {h}")
+    monkeypatch.setattr(desc, "config", {"kind": None})
+    for key in ["JAX_PLATFORMS", "CUDA_DEVICE_ORDER"]:  # restored after the test
+        monkeypatch.delenv(key, raising=False)
+    # a UUID, a prefix as HTCondor sets, and an index
+    for visible in [uuids[1], "GPU-8f3e", "1"]:
+        monkeypatch.setenv("CUDA_VISIBLE_DEVICES", visible)
+        desc.set_device("gpu")
+        assert desc.config["device"] == f"GPU 1 (id={visible})"
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "GPU-")
+    with pytest.raises(ValueError, match="matches 2 GPUs"):
+        desc.set_device("gpu")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "m, n",
+    [
+        (100, 20),  # tall
+        (20, 100),  # wide
+        (50, 50),  # square
+        (600, 260),  # tall, and has more than nb columns
+    ],
+)
+@pytest.mark.parametrize("cond", [None, 1e8])
+def test_qr_multiply(m, n, cond):
+    """Test qr_multiply matches forming Q explicitly."""
+
+    def _qr_multiply_ref(a, c, mode="right"):
+        """Reference qr_multiply that forms Q explicitly."""
+        Q, R = qr(a, mode="economic")
+        if mode == "right":
+            cq = Q.T @ c if c.ndim == 1 else c @ Q
+        else:
+            cq = Q @ c
+        return cq, R
+
+    rng = np.random.default_rng(seed=0)
+    k = min(m, n)
+
+    if cond is None:
+        # gaussian matrices are usually well conditioned
+        A = rng.standard_normal((m, n))
+    else:
+        # create some ill conditioned matrix using reverse SVD
+        # this is still full rank
+        U = np.linalg.qr(rng.standard_normal((m, k)))[0]
+        V = np.linalg.qr(rng.standard_normal((n, k)))[0]
+        A = (U * np.logspace(0, -np.log10(cond), k)) @ V.T
+    b = rng.standard_normal(m)
+    print(
+        f"Running {m=} {n=} {cond=}, actual condition number is {np.linalg.cond(A):.3e}"
+    )
+
+    # mode="right" with 1D c is Q.T@b
+    Qtb, R = qr_multiply(A, b, mode="right")
+    Qtb_ref, R_ref = _qr_multiply_ref(A, b, mode="right")
+    assert R.shape == (k, n)
+    np.testing.assert_allclose(R, R_ref, rtol=1e-12, atol=1e-12 * np.abs(A).max())
+    np.testing.assert_allclose(Qtb, Qtb_ref, rtol=1e-10, atol=1e-10)
+
+    # mode="right" with 2D c is c@Q
+    C = rng.standard_normal((3, m))
+    CQ, _ = qr_multiply(A, C, mode="right")
+    np.testing.assert_allclose(CQ, _qr_multiply_ref(A, C, "right")[0], atol=1e-10)
+
+    # mode="left" is Q@c, with c=I recovers Q
+    Q, _ = qr_multiply(A, np.eye(k), mode="left")
+    np.testing.assert_allclose(Q, _qr_multiply_ref(A, np.eye(k), "left")[0], atol=1e-10)
+    np.testing.assert_allclose(Q.T @ Q, np.eye(k), atol=1e-10)
+    np.testing.assert_allclose(Q @ R, A, atol=1e-10 * np.abs(A).max())
+    y = rng.standard_normal(k)
+    Qy, _ = qr_multiply(A, y, mode="left")
+    np.testing.assert_allclose(Qy, _qr_multiply_ref(A, y, "left")[0], atol=1e-10)
+
+    # solve A@x = b
+    if m >= n:
+        x = solve_triangular(R, Qtb)
+        x_ref = solve_triangular(R_ref, Qtb_ref)
+    else:
+        # for wide A, use the QR of A.T
+        Q1, R1 = qr_multiply(A.T, np.eye(k), mode="left")
+        Q1_ref, R1_ref = _qr_multiply_ref(A.T, np.eye(k), mode="left")
+        x = Q1 @ solve_triangular(R1.T, b, lower=True)
+        x_ref = Q1_ref @ solve_triangular(R1_ref.T, b, lower=True)
+    x_np = np.linalg.lstsq(A, b, rcond=None)[0]
+    np.testing.assert_allclose(x, x_ref, rtol=1e-8, atol=1e-8 * np.abs(x_np).max())
+    np.testing.assert_allclose(x, x_np, rtol=1e-8, atol=1e-8 * np.abs(x_np).max())

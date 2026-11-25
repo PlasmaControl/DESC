@@ -1105,6 +1105,43 @@ def test_BdotgradB(DummyStellarator):
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize("sym", [False, "cos", "sin", "custom"])
+def test_boozer_projection(sym):
+    """Compare Boozer projections and derivatives with dense basis evaluation."""
+    import jax
+
+    from desc.basis import ChebyshevDoubleFourierBasis, DoubleFourierSeries
+    from desc.compute._omnigenity import _project
+
+    basis = (
+        ChebyshevDoubleFourierBasis(L=1, M=3, N=2, NFP=3)
+        if sym == "custom"
+        else DoubleFourierSeries(M=3, N=2, NFP=3, sym=sym)
+    )
+    rng = np.random.default_rng(42)
+    nodes = rng.uniform(size=(31, 3))
+    f = rng.normal(size=31)
+    tangent = (rng.normal(size=nodes.shape), rng.normal(size=f.shape))
+
+    def project(nodes, f):
+        return _project(basis, nodes, f)
+
+    def dense(nodes, f):
+        return basis.evaluate(nodes).T @ f
+
+    for actual, expected in zip(
+        jax.jvp(project, (nodes, f), tangent), jax.jvp(dense, (nodes, f), tangent)
+    ):
+        np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
+    cotangent = rng.normal(size=basis.num_modes)
+    for actual, expected in zip(
+        jax.vjp(project, nodes, f)[1](cotangent),
+        jax.vjp(dense, nodes, f)[1](cotangent),
+    ):
+        np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
+
+
+@pytest.mark.unit
 @pytest.mark.solve
 def test_boozer_transform():
     """Test that Boozer coordinate transform agrees with BOOZ_XFORM."""
@@ -1546,14 +1583,19 @@ def test_contravariant_basis_vectors_PEST(eq):
 
 @pytest.mark.unit
 @pytest.mark.slow
-@pytest.mark.parametrize("eq", [get("precise_QA")])
-def test_PEST_derivative_math(eq):
+@pytest.mark.parametrize("eq, mapping_tol", [(get("precise_QA"), 1e-10)])
+def test_PEST_derivative_math(eq, mapping_tol):
     """Verify math to write PEST derivative quantities by redefining θ to θ_PEST."""
     from desc.compute import data_index
 
-    tol = 1e-10
     # TODO: can reduce rtol of test if resolution is increased. See DESC git #1919
-    eq_PEST = eq.to_sfl(3 * eq.L, 3 * eq.M, 3 * eq.N, copy=True, tol=tol)
+    eq_PEST = eq.to_sfl(3 * eq.L, 3 * eq.M, 3 * eq.N, copy=True, tol=mapping_tol)
+    eq.change_resolution(
+        L_grid=eq_PEST.L_grid, M_grid=eq_PEST.M_grid, N_grid=eq_PEST.N_grid
+    )
+    grid_PEST = LinearGrid(
+        rho=np.linspace(0.2, 1, 10), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
+    )
 
     keys_DESC = [
         "e_theta",
@@ -1650,15 +1692,13 @@ def test_PEST_derivative_math(eq):
     keys_DESC = list(keys_DESC)
     keys_PEST = list(keys_PEST)
 
-    grid_PEST = LinearGrid(
-        rho=np.linspace(0.2, 1, 10), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
-    )
     data = eq_PEST.compute(keys_DESC + keys_PEST, grid_PEST)
-
     data_to_verify = eq.compute(
         keys_PEST,
         Grid(
-            eq.map_coordinates(grid_PEST.nodes, ("rho", "theta_PEST", "zeta"), tol=tol)
+            eq.map_coordinates(
+                grid_PEST.nodes, ("rho", "theta_PEST", "zeta"), tol=mapping_tol
+            )
         ),
     )
 
@@ -2044,6 +2084,45 @@ def test_parallel_grad_fd(DummyStellarator):
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(data["B^zeta_z|r,a"])),
     )
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+def test_fieldline_average():
+    """Test that fieldline average converges to surface average."""
+    rho = np.array([1])
+    alpha = np.array([0])
+    eq = get("DSHAPE")
+    iota_grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+    iota = iota_grid.compress(eq.compute("iota", grid=iota_grid)["iota"]).item()
+    # For axisymmetric devices, one poloidal transit must be exact.
+    zeta = np.linspace(0, 2 * np.pi / iota, 25)
+    grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+    data = eq.compute(
+        ["fieldline length", "fieldline length/volume", "V_r(r)"], grid=grid
+    )
+    np.testing.assert_allclose(
+        data["fieldline length"] / data["fieldline length/volume"],
+        data["V_r(r)"] / (4 * np.pi**2),
+        rtol=1e-3,
+    )
+    assert np.all(data["fieldline length"] > 0)
+    assert np.all(data["fieldline length/volume"] > 0)
+
+    # Otherwise, many toroidal transits are necessary to sample surface.
+    eq = get("W7-X")
+    zeta = np.linspace(0, 40 * np.pi, 300)
+    grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+    data = eq.compute(
+        ["fieldline length", "fieldline length/volume", "V_r(r)"], grid=grid
+    )
+    np.testing.assert_allclose(
+        data["fieldline length"] / data["fieldline length/volume"],
+        data["V_r(r)"] / (4 * np.pi**2),
+        rtol=2e-3,
+    )
+    assert np.all(data["fieldline length"] > 0)
+    assert np.all(data["fieldline length/volume"] > 0)
 
 
 @pytest.mark.unit

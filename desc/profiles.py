@@ -21,6 +21,19 @@ from desc.utils import (
     warnif,
 )
 
+__all__ = [
+    "FourierZernikeProfile",
+    "HermiteSplineProfile",
+    "MTanhProfile",
+    "PowerProfile",
+    "PowerSeriesProfile",
+    "ProductProfile",
+    "ScaledProfile",
+    "SplineProfile",
+    "SumProfile",
+    "TwoPowerProfile",
+]
+
 
 class _Profile(IOAble, ABC):
     """Abstract base class for profiles.
@@ -219,7 +232,22 @@ class _Profile(IOAble, ABC):
 
     def __mul__(self, x):
         """Multiply this profile by another or a constant."""
-        if np.isscalar(x):
+        if jnp.isscalar(x):
+            copy = self.copy()
+            if isinstance(self, ScaledProfile):
+                copy.params = copy.params[0] * x  # equivalent to copy._scale *= x
+                return copy
+            if (
+                isinstance(self, PowerSeriesProfile)
+                or isinstance(self, SplineProfile)
+                or isinstance(self, HermiteSplineProfile)
+                or isinstance(self, FourierZernikeProfile)
+            ):
+                copy.params *= x
+                return copy
+            if isinstance(self, TwoPowerProfile):
+                copy.params *= jnp.array([x, 1, 1])  # [scale, 1st power, 2nd power]
+                return copy
             return ScaledProfile(x, self)
         elif isinstance(x, _Profile):
             return ProductProfile(self, x)
@@ -239,7 +267,7 @@ class _Profile(IOAble, ABC):
 
     def __neg__(self):
         """Invert the sign of this profile."""
-        return ScaledProfile(-1, self)
+        return self.__mul__(-1)
 
     def __sub__(self, x):
         """Subtract another profile from this one."""
@@ -247,7 +275,11 @@ class _Profile(IOAble, ABC):
 
     def __pow__(self, x):
         """Raise this profile to a power."""
-        if np.isscalar(x):
+        if jnp.isscalar(x):
+            copy = self.copy()
+            if isinstance(self, PowerProfile):
+                copy.params = copy.params[0] * x  # equivalent to copy._power *= x
+                return copy
             return PowerProfile(x, self)
         else:
             raise NotImplementedError()
@@ -279,7 +311,7 @@ class ScaledProfile(_Profile):
         ), "profile in a ScaledProfile must be a Profile or subclass, got {}.".format(
             str(profile)
         )
-        assert np.isscalar(scale), "scale must be a scalar."
+        assert jnp.isscalar(scale), "scale must be a scalar."
 
         self._profile = profile.copy()
         self._scale = scale
@@ -303,7 +335,7 @@ class ScaledProfile(_Profile):
         elif isinstance(x, (tuple, list)) and len(x) == 2:
             params = x[1]
             scale = x[0]
-        elif np.isscalar(x):
+        elif jnp.isscalar(x):
             scale = x
             params = self._profile.params
         elif len(x) == len(self._profile.params):
@@ -369,7 +401,7 @@ class PowerProfile(_Profile):
         ), "profile in a PowerProfile must be a Profile or subclass, got {}.".format(
             str(profile)
         )
-        assert np.isscalar(power), "power must be a scalar."
+        assert jnp.isscalar(power), "power must be a scalar."
 
         self._profile = profile.copy()
         self._power = power
@@ -406,7 +438,7 @@ class PowerProfile(_Profile):
         elif isinstance(x, (tuple, list)) and len(x) == 2:
             params = x[1]
             power = x[0]
-        elif np.isscalar(x):
+        elif jnp.isscalar(x):
             power = x
             params = self._profile.params
         elif len(x) == len(self._profile.params):
@@ -964,10 +996,10 @@ class SplineProfile(_Profile):
 
         if values is None:
             values = [0, 0, 0]
-        values = jnp.atleast_1d(values)
+        values = jnp.atleast_1d(jnp.asarray(values))
         if knots is None:
             knots = jnp.linspace(0, 1, values.size)
-        knots = jnp.atleast_1d(knots)
+        knots = jnp.atleast_1d(jnp.asarray(knots))
         errorif(values.shape[-1] != knots.shape[-1])
         errorif(not (values.ndim == knots.ndim == 1), NotImplementedError)
         self._knots = knots
@@ -1056,10 +1088,10 @@ class HermiteSplineProfile(_Profile):
     def __init__(self, f, df, knots=None, name=""):
         super().__init__(name)
 
-        f, df = jnp.atleast_1d(f, df)
+        f, df = jnp.atleast_1d(jnp.asarray(f), jnp.asarray(df))
         if knots is None:
             knots = jnp.linspace(0, 1, f.size)
-        knots = jnp.atleast_1d(knots)
+        knots = jnp.atleast_1d(jnp.asarray(knots))
         errorif(not (f.shape[-1] == df.shape[-1] == knots.shape[-1]))
         errorif(not (f.ndim == df.ndim == knots.ndim == 1), NotImplementedError)
         self._knots = knots
@@ -1159,7 +1191,7 @@ class MTanhProfile(_Profile):
 
         if params is None:
             params = [0, 0, 1, 1, 0]
-        self._params = params
+        self._params = jnp.atleast_1d(jnp.asarray(params))
 
     def __repr__(self):
         """Get the string form of the object."""

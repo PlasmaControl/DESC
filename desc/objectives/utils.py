@@ -69,6 +69,7 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
             )
 
     from desc.optimize import ProximalProjection
+    from desc.optimize.utils import scatter_rows
 
     # particular solution to Ax=b
     xp = jnp.zeros(objective.dim_x)
@@ -93,6 +94,8 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
                 cols = np.append(cols, np.arange(c, c + t.dim_x))
                 c += t.dim_x
         A = A[:, cols]
+    else:
+        cols = np.arange(constraint.dim_x)
     assert A.shape[1] == xp.size
 
     # check for degenerate rows and delete if necessary
@@ -149,16 +152,43 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     Z = jnp.asarray(Z)
     D = jnp.asarray(D)
 
-    project = _Project(Z, D, xp, unfixed_idx)
-    recover = _Recover(Z, D, xp, unfixed_idx, objective.dim_x)
+    # Tangent directions of the reduced parameters in the full space, such that
+    # A[unfixed_idx] @ D @ Z == A @ feasible_tangents. During optimization we have the
+    # reduced parameters x_reduced, and we need to compute the derivatives for that,
+    # but since compute functions are written for the full state vector, we have to
+    # compute the derivatives with these tangents.
+    # For example, let's say the full state vector X has constraints X1=X2 and
+    # X = [X1 X2 X3]. The reduced state vector of this is Y = [Y1 Y2]. We can take
+    # Y1=X1=X2 and Y2=X3. Then df/dY1 = df/dX1 + df/dX2 and df/dY2 = df/dX3.
+    # in this case, feasible_tangents = [ [1 , 0], [1, 0], [0,1]]
+    # and is a shape 3x2 matrix equivalent to dx/dy
+    # s.t. df/dy = df/dx @ dx/dy
+
+    # df/dx_reduced = df/dx_full_unscaled @ dx_full_unscaled/dx_reduced   # noqa: E800
+    # x_full_unscaled = D(xp + Z @ x_reduced)                             # noqa: E800
+    # So, the feasible tangents (aka. dx_full_unscaled/dx_reduced) is D@Z
+    # Since the fixed parameters stay constant, we add 0 rows by below operation.
+    # project, recover and the jacobians are all expressible with these, so Z itself
+    # does not need to be kept alive, which matters at high resolution where it is
+    # comparable in size to the Jacobian.
+    feasible_tangents = scatter_rows(
+        objective.dim_x, unfixed_idx, D[unfixed_idx, None] * Z
+    )
+
+    project = _Project(feasible_tangents, D, xp)
+    recover = _Recover(feasible_tangents, D, xp)
 
     # check that all constraints are actually satisfiable
-    params = objective.unpack_state(D * xp, False)
+    x_full = put(x0, cols, D * xp)
+    f = np.asarray(constraint.compute_scaled_error(x_full))
+    offset = 0
     for con in constraint.objectives:
-        xpi = [params[i] for i, t in enumerate(objective.things) if t in con.things]
-        y1 = con.compute_unscaled(*xpi)
+        # get portion of the error corresponding to this constraint
+        dim = con.dim_f
+        y1 = con._unshift(con._unscale(f[offset : offset + dim]))
         y2 = con.target
         y1, y2 = np.broadcast_arrays(y1, y2)
+        offset += dim
 
         # If the error is very large, likely want to error out as
         # it probably is due to a real mistake instead of just numerical
@@ -211,37 +241,34 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
 
 
 class _Project(IOAble):
-    _io_attrs_ = ["Z", "D", "xp", "unfixed_idx"]
+    _io_attrs_ = ["feasible_tangents", "D", "xp"]
 
-    def __init__(self, Z, D, xp, unfixed_idx):
-        self.Z = Z
+    def __init__(self, feasible_tangents, D, xp):
+        self.feasible_tangents = feasible_tangents
         self.D = D
         self.xp = xp
-        self.unfixed_idx = unfixed_idx
 
     @jit
     def __call__(self, x_full):
         """Project a full state vector into the reduced optimization vector."""
-        x_reduced = self.Z.T @ ((1 / self.D) * x_full - self.xp)[self.unfixed_idx]
+        # Z.T @ y[unfixed_idx] == feasible_tangents.T @ (y / D), since the
+        # feasible_tangents are D @ Z with zero rows where the parameters are fixed.
+        x_reduced = self.feasible_tangents.T @ (x_full / self.D**2 - self.xp / self.D)
         return jnp.atleast_1d(jnp.squeeze(x_reduced))
 
 
 class _Recover(IOAble):
-    _io_attrs_ = ["Z", "D", "xp", "unfixed_idx", "dim_x"]
-    _static_attrs = ["dim_x"]
+    _io_attrs_ = ["feasible_tangents", "D", "xp"]
 
-    def __init__(self, Z, D, xp, unfixed_idx, dim_x):
-        self.Z = Z
+    def __init__(self, feasible_tangents, D, xp):
+        self.feasible_tangents = feasible_tangents
         self.D = D
         self.xp = xp
-        self.unfixed_idx = unfixed_idx
-        self.dim_x = dim_x
 
     @jit
     def __call__(self, x_reduced):
         """Recover the full state vector from the reduced optimization vector."""
-        dx = put(jnp.zeros(self.dim_x), self.unfixed_idx, self.Z @ x_reduced)
-        x_full = self.D * (self.xp + dx)
+        x_full = self.D * self.xp + self.feasible_tangents @ x_reduced
         return jnp.atleast_1d(jnp.squeeze(x_full))
 
 

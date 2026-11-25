@@ -4,6 +4,7 @@ import numpy as np
 from scipy.constants import elementary_charge, mu_0
 
 from desc.geometry import Curve
+from desc.utils import warnif
 
 
 def compute_scaling_factors(thing):
@@ -20,7 +21,7 @@ def compute_scaling_factors(thing):
             np.logical_or(np.abs(basis.modes[:, 1]) > 0, np.abs(basis.modes[:, 2]) > 0)
         )[0]
 
-        val = np.max(np.abs(coeffs[inds_not_00]))
+        val = np.max(np.abs(np.asarray(coeffs)[inds_not_00]))
         if not np.isclose(val, 0, atol=1e-12):
             return val
         raise ValueError("No modes found, geometry is unphysical.")
@@ -45,16 +46,44 @@ def compute_scaling_factors(thing):
         scales["F"] = B_pressure / scales["a"]
         scales["f"] = scales["F"] * scales["V"]
 
-        if thing.pressure is not None:
-            p0 = float(thing.pressure(0)[0])
-        else:
-            scales["n"] = float(
-                ((thing.atomic_number(0) + 1) / 2 * thing.electron_density(0))[0]
-            )
+        has_kinetic = any(
+            [
+                getattr(thing, name, None) is not None
+                for name in [
+                    "_electron_temperature",
+                    "_electron_density",
+                    "_ion_temperature",
+                    "_ion_density",
+                    "_atomic_number",
+                ]
+            ]
+        )
+        if thing.electron_density is not None:
+            if thing.ion_density is not None:
+                scales["n"] = np.mean([thing.electron_density(0), thing.ion_density(0)])
+            elif thing.atomic_number is not None:
+                Zeff = thing.atomic_number(0)[0]
+                scales["n"] = float(
+                    (Zeff + 1) / (2 * Zeff) * thing.electron_density(0)[0]
+                )
+            else:
+                scales["n"] = thing.electron_density(0)
+        if thing.electron_temperature is not None and thing.ion_temperature is not None:
             scales["T"] = np.mean(
                 [thing.electron_temperature(0), thing.ion_temperature(0)]
             )
+        if "n" in scales.keys() and "T" in scales.keys():
             p0 = elementary_charge * 2 * scales["n"] * scales["T"]
+        if thing.pressure is not None:
+            p0 = float(thing.pressure(0)[0])
+            warnif(
+                has_kinetic,
+                UserWarning,
+                "Equilibrium has both kinetic and pressure profiles assigned to it."
+                " By default, the pressure profile will be used for the normalization "
+                "and the computation of pressure, which may lead to unexpected "
+                "results when kinetic profiles are also present.",
+            )
         if p0 < 1:  # vacuum
             scales["p"] = B_pressure
         else:

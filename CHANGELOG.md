@@ -1,6 +1,14 @@
 Changelog
 =========
 
+Performance Improvements
+
+- Speeds up ``Equilibrium.map_coordinates`` from ``(rho, alpha, zeta)`` and ``(rho, theta_PEST, zeta)`` by summing lambda over its radial and toroidal modes once per point.
+
+
+v0.17.4
+-------
+
 New Features
 
 - Adds `desc.compat.flip_magnetic_field` compatibility function to reverse the direction of an Equilibrium magnetic field.

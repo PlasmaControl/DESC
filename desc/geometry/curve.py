@@ -304,6 +304,9 @@ class FourierRZCurve(Curve):
         # so we can more easily check if it is monotonic
         inds_negative = np.where(phi < 0)
         phi = phi.at[inds_negative].set(phi[inds_negative] + 2 * np.pi)
+        # ensure the phi array starts from the smallest value
+        start = int(np.argmin(phi))
+        R, phi, Z = (jnp.roll(v, -start) for v in (R, phi, Z))
 
         # assert the curve is not doubling back on itself in phi,
         # which can't be represented with a curve parameterized by phi

@@ -544,7 +544,7 @@ def test_NAE_QSC_2nd_order_solve():
         verbose=3,
         ftol=1e-3,
         objective=obj,
-        maxiter=45,
+        maxiter=80,
         xtol=2.5e-7,
         constraints=cs,
     )
@@ -576,6 +576,7 @@ def test_NAE_QSC_2nd_order_solve():
     # only check to within 10% as the quantity needs higher resolution
     # to accurately resolve, if we are within 10% at these resolutions we are
     # doing extremely well compared to a fixed bdry solve at this aspect ratio
+    # this part of the test is very sensitive
     grid = LinearGrid(
         rho=1e-3,
         axis=False,

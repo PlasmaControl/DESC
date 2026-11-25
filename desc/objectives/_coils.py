@@ -899,7 +899,8 @@ class CoilSetMinDistance(_Objective):
         softmin approximates the hardmin. softmin -> hardmin as
         ``softmin_alpha`` -> infinity.
     dist_chunk_size : int > 0, optional
-        When computing distances, how many coils to consider at once. Default is all
+        When computing distances, maximum number of coils to consider at once. Each
+        chunk will have the same number of coils. Default is all
         coils, which is generally the fastest but requires the most memory. If there are
         a large number of coils, or if the resolution is very high, setting this to a
         small value will reduce peak memory usage at the cost of slightly increased
@@ -1110,7 +1111,8 @@ class PlasmaCoilSetDistanceBound(_Objective):
         softmin (softmax) approximates the hardmin (hardmax). softmin -> hardmin as
         ``softmin_alpha`` -> infinity.
     dist_chunk_size : int > 0, optional
-        When computing distances, how many coils to consider at once. Default is all
+        When computing distances, maximum number of coils to consider at once. Each
+        chunk will have the same number of coils. Default is all
         coils, which is generally the fastest but requires the most memory. If there are
         a large number of coils, or if the resolution is very high, setting this to a
         small value will reduce peak memory usage at the cost of slightly increased
@@ -1402,7 +1404,8 @@ class PlasmaCoilSetMinDistance(PlasmaCoilSetDistanceBound):
         softmin approximates the hardmin. softmin -> hardmin as
         ``softmin_alpha`` -> infinity.
     dist_chunk_size : int > 0, optional
-        When computing distances, how many coils to consider at once. Default is all
+        When computing distances, maximum number of coils to consider at once. Each
+        chunk will have the same number of coils. Default is all
         coils, which is generally the fastest but requires the most memory. If there are
         a large number of coils, or if the resolution is very high, setting this to a
         small value will reduce peak memory usage at the cost of slightly increased

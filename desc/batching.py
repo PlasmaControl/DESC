@@ -135,11 +135,12 @@ def _evaluate_in_chunks(
         return chunk_reduction(vmapped_fun(*args, **kwargs))
 
     if reduction is None:
-        # number of elements that will be in scan of chunks
-        n_scan = n_elements - n_elements % chunk_size
+        # use same sized chunks, so that f is compiled once instead of also for a
+        # remainder. Keep the number of chunks, but balance their sizes.
+        size = -(-n_elements // -(-n_elements // chunk_size))
         f_partial, dyn_args = _argnums_partial(vmapped_fun, argnums, args, kwargs)
 
-        def f_chunk(i, size=chunk_size):
+        def f_chunk(i):
             # evaluate f on rows i to i + size of the mapped arguments
             x = tree_map(lambda a: jax.lax.dynamic_slice_in_dim(a, i, size), dyn_args)
             return chunk_reduction(f_partial(*x))
@@ -154,19 +155,14 @@ def _evaluate_in_chunks(
                 None,
             )
 
-        # evaluate the remainder if there is one, otherwise only get the output shape
-        y = (
-            f_chunk(n_scan, n_elements - n_scan)
-            if n_scan < n_elements
-            else jax.eval_shape(f_chunk, 0)
-        )
         # initialize the output buffer with zeros
+        y = jax.eval_shape(f_chunk, 0)
         out = tree_map(lambda y: jnp.zeros((n_elements, *y.shape[1:]), y.dtype), y)
-        if n_scan < n_elements:
-            # update the output buffer with the remainder
-            out = tree_map(lambda o, y: o.at[n_scan:].set(y), out, y)
+        # the last chunk is shifted back to end at the last element, which recomputes
+        # less than one element per chunk
+        starts = jnp.minimum(jnp.arange(0, n_elements, size), n_elements - size)
         # update the output buffer with the scan of chunks
-        return scan(body, out, jnp.arange(0, n_scan, chunk_size))[0]
+        return scan(body, out, starts)[0]
 
     scan_x, remain_x = zip(
         *[
@@ -238,9 +234,8 @@ def vmap_chunked(
     in_axes : int or None
         The axes that should be scanned along. Only supports ``0`` or ``None``.
     chunk_size : int or None
-        Size to split computation into chunks.
-        If no chunking should be done or the chunk size is the full input
-        then supply ``None``.
+        Maximum number of elements in a chunk. Each chunk will have the same number
+        of elements, unless ``reduction`` is given. If ``None``, no chunking is done.
     reduction : callable or None
         Binary reduction operation.
         Should take two arguments and return one output, e.g. ``jnp.add``.
@@ -300,8 +295,9 @@ def batched_vectorize(pyfunc, *, excluded=frozenset(), signature=None, chunk_siz
     provided, ``pyfunc`` will be called with (and expected to return) arrays
     with shapes given by the size of corresponding core dimensions. By
     default, pyfunc is assumed to take scalars arrays as input and output.
-    chunk_size: the size of the batches to pass to vmap. If None, defaults to
-    the largest possible chunk_size (like the default behavior of ``vectorize11)
+    chunk_size: maximum number of elements in a chunk to pass to vmap. Each chunk
+    will have the same number of elements. If None, no chunking is done (like the
+    default behavior of ``vectorize``)
 
     Returns
     -------
@@ -430,8 +426,8 @@ def jacfwd_chunked(
     holomorphic: Optional, bool.
         Indicates whether ``fun`` is promised to be holomorphic. Default False.
     chunk_size: int
-        The size of the batches to pass to vmap. If None, defaults to the largest
-        possible chunk_size.
+        Maximum number of elements in a chunk to pass to vmap. Each chunk will have
+        the same number of elements. If None, no chunking is done.
 
     Returns
     -------
@@ -517,8 +513,8 @@ def jacrev_chunked(
         gradient of an integer input will have a trivial vector-space dtype (float0).
         Default False.
     chunk_size: int
-        The size of the batches to pass to vmap. If None, defaults to the largest
-        possible chunk_size.
+        Maximum number of elements in a chunk to pass to vmap. Each chunk will have
+        the same number of elements. If None, no chunking is done.
 
     Returns
     -------

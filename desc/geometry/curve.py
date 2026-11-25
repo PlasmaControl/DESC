@@ -1419,18 +1419,21 @@ class FourierXYCurve(Curve):
 
 
 class SplineXYZCurve(Curve):
-    """Curve parameterized by spline knots in X,Y,Z.
+    """Closed curve parameterized by spline knots in X,Y,Z.
 
     Parameters
     ----------
     X, Y, Z: array-like
         Points for X, Y, Z describing the curve. If the endpoint is included
-        (ie, X[0] == X[-1]), then the final point will be dropped.
+        (ie, X[0] == X[-1]), then the final point will be dropped. If it is not
+        included, the curve is still closed, with a segment from the last point
+        back to the first one.
     knots : ndarray or "arclength"
         arbitrary curve parameter values to use for spline knots,
         should be a monotonic, 1D ndarray of same length as the input X,Y,Z.
         If None, defaults to using an linearly spaced points in [0, 2pi) as the knots.
-        If supplied, should lie in [0,2pi].
+        If supplied, should lie in [0,2pi]. The part of the curve between the last
+        knot and 2pi is the segment from the last point back to the first one.
         Alternatively, the string "arclength" can be supplied to use the normalized
         distance between points.
     method : str
@@ -1653,7 +1656,7 @@ class SplineXYZCurve(Curve):
             Points for X, Y, Z (or R, phi, Z) describing the curve with each column
             corresponding to xyz or rpz depending on the basis argument. If the
             endpoint is included (ie, X[0] == X[-1]), then the final point will be
-            dropped.
+            dropped. The curve is always closed, see SplineXYZCurve.
         knots : ndarray
             Arbitrary curve parameter values to use for spline knots,
             should be an 1D ndarray of same length as the input.

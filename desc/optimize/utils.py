@@ -472,15 +472,25 @@ def check_termination(
     **kwargs,
 ):
     """Check termination condition and get message."""
-    # When the step is limited by the trust region boundary, a small change in cost
-    # or x reflects the size of the trust region rather than convergence, so ftol
-    # and xtol are only checked for steps that end inside the trust region. This
-    # prevents stopping early when the trust region is small (eg the initial step
-    # or after several step rejections) but the model predicts further progress.
-    ftol_satisfied = 0 < dF < abs(ftol * F) and reduction_ratio > 0.25
-    ftol_satisfied = ftol_satisfied and not hits_boundary
-    xtol_satisfied = dx_norm < xtol * (xtol + x_norm) and reduction_ratio > 0.25
-    xtol_satisfied = xtol_satisfied and not hits_boundary
+    # For an accepted step that is limited by the trust region boundary, a small
+    # change in cost or x reflects the size of the trust region rather than
+    # convergence, and the trust region may grow on the next iteration. So for
+    # accepted steps, ftol and xtol are only checked when the step ends inside the
+    # trust region. This prevents stopping early when the trust region is small (eg
+    # the initial step or after several step rejections) but the model predicts
+    # further progress.
+    interior_step = reduction_ratio > 0.25 and not hits_boundary
+    # A rejected step shrinks the trust region, so every later trial step is smaller
+    # than this one. If a rejected step is already within xtol, any step that would
+    # eventually be accepted is too, so stop now rather than spending function
+    # evaluations shrinking the trust region. This matters most when the objective is
+    # only evaluated approximately, where steps near convergence are rejected about
+    # as often as not. A NaN ratio fails this comparison, so a NaN cost never stops
+    # on xtol.
+    step_rejected = reduction_ratio <= 0
+    ftol_satisfied = 0 < dF < abs(ftol * F) and interior_step
+    xtol_satisfied = dx_norm < xtol * (xtol + x_norm)
+    xtol_satisfied = xtol_satisfied and (interior_step or step_rejected)
     gtol_satisfied = g_norm < gtol
     ctol_satisfied = kwargs.get("constr_violation", 0) < kwargs.get("ctol", np.inf)
 

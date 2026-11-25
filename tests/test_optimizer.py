@@ -545,6 +545,17 @@ def test_no_early_termination_on_trust_region_boundary():
     success, message = check_termination(hits_boundary=True, **args)
     assert success is None
     assert message is None
+    # a rejected step already within xtol should stop, wherever it ends
+    for hits_boundary in [True, False]:
+        args["reduction_ratio"] = -1.0
+        success, message = check_termination(hits_boundary=hits_boundary, **args)
+        assert success
+        assert STATUS_MESSAGES["xtol"] in message
+        assert STATUS_MESSAGES["ftol"] not in message
+    # but not if the cost is NaN
+    args["reduction_ratio"] = np.nan
+    success, message = check_termination(hits_boundary=False, **args)
+    assert success is None
 
     # small initial trust radius means the first steps give a small reduction in
     # cost relative to ftol, but the optimizer should keep going and grow the
@@ -563,6 +574,24 @@ def test_no_early_termination_on_trust_region_boundary():
     )
     assert out["nit"] > 1
     np.testing.assert_allclose(out["x"], 1.0)
+
+    # with a small non-smooth error in the objective, steps near the solution are
+    # rejected about as often as not. The optimizer should stop on xtol once a
+    # rejected step is within tolerance, rather than shrinking the trust region
+    # down to machine precision.
+    rng = default_rng(0)
+    A = rng.random((20, 10))
+    b = rng.random(20)
+    fun = lambda x: 0.5 * jnp.sum((A @ x - b) ** 2) + 1e-6 * jnp.sum(
+        jnp.abs(jnp.sin(1e5 * x))
+    )
+    grad = lambda x: A.T @ (A @ x - b)
+    hess = lambda x: A.T @ A
+    out = fmintr(fun, np.zeros(10), grad, hess, ftol=0, xtol=1e-6, gtol=0)
+    assert out["success"]
+    assert STATUS_MESSAGES["xtol"] in out["message"]
+    assert out["nfev"] < 10
+    np.testing.assert_allclose(out["x"], np.linalg.lstsq(A, b, rcond=None)[0])
 
 
 @pytest.mark.unit

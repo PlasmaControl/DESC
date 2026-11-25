@@ -78,7 +78,13 @@ from desc.optimize.tr_subproblems import (
     trust_region_step_exact_qr,
     trust_region_step_exact_svd,
 )
-from desc.optimize.utils import chol, gershgorin_bounds, solve_triangular_regularized
+from desc.optimize.utils import (
+    STATUS_MESSAGES,
+    check_termination,
+    chol,
+    gershgorin_bounds,
+    solve_triangular_regularized,
+)
 from desc.utils import get_all_instances
 
 
@@ -511,6 +517,52 @@ class TestLSQTR:
             },
         )
         np.testing.assert_allclose(out["x"], p)
+
+
+@pytest.mark.unit
+def test_no_early_termination_on_trust_region_boundary():
+    """Test that ftol/xtol don't stop iterations when the step hits the boundary."""
+    args = dict(
+        dF=1e-4,
+        F=1.0,
+        dx_norm=1e-8,
+        x_norm=jnp.array(1.0),
+        g_norm=1.0,
+        reduction_ratio=1.0,
+        ftol=1e-2,
+        xtol=1e-2,
+        gtol=0.0,
+        iteration=1,
+        maxiter=100,
+        nfev=1,
+        max_nfev=100,
+        min_trust_radius=0.0,
+    )
+    success, message = check_termination(hits_boundary=False, **args)
+    assert success
+    assert STATUS_MESSAGES["ftol"] in message
+    assert STATUS_MESSAGES["xtol"] in message
+    success, message = check_termination(hits_boundary=True, **args)
+    assert success is None
+    assert message is None
+
+    # small initial trust radius means the first steps give a small reduction in
+    # cost relative to ftol, but the optimizer should keep going and grow the
+    # trust region until it reaches the solution.
+    fun = lambda x: x - 1.0
+    jac = Derivative(fun, 0, "fwd")
+    out = lsqtr(
+        fun,
+        np.zeros(5),
+        jac,
+        x_scale=1,
+        ftol=1e-2,
+        xtol=0,
+        gtol=0,
+        options={"initial_trust_radius": 1e-4},
+    )
+    assert out["nit"] > 1
+    np.testing.assert_allclose(out["x"], 1.0)
 
 
 @pytest.mark.unit

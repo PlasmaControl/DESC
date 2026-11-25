@@ -468,11 +468,19 @@ def check_termination(
     maxiter,
     nfev,
     max_nfev,
+    hits_boundary,
     **kwargs,
 ):
     """Check termination condition and get message."""
+    # When the step is limited by the trust region boundary, a small change in cost
+    # or x reflects the size of the trust region rather than convergence, so ftol
+    # and xtol are only checked for steps that end inside the trust region. This
+    # prevents stopping early when the trust region is small (eg the initial step
+    # or after several step rejections) but the model predicts further progress.
     ftol_satisfied = 0 < dF < abs(ftol * F) and reduction_ratio > 0.25
+    ftol_satisfied = ftol_satisfied and not hits_boundary
     xtol_satisfied = dx_norm < xtol * (xtol + x_norm) and reduction_ratio > 0.25
+    xtol_satisfied = xtol_satisfied and not hits_boundary
     gtol_satisfied = g_norm < gtol
     ctol_satisfied = kwargs.get("constr_violation", 0) < kwargs.get("ctol", np.inf)
 

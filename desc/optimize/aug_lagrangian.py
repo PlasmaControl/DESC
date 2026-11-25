@@ -544,6 +544,7 @@ def fmin_auglag(  # noqa: C901
                 maxiter,
                 nfev,
                 max_nfev,
+                hits_boundary,
                 min_trust_radius=min_trust_radius,
                 dx_total=jnp.linalg.norm(z - z0),
                 max_dx=max_dx,

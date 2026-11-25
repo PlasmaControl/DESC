@@ -541,7 +541,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
         if source_grid is None:
             # NFP=1 to ensure points span the entire length of the coil
             # multiply resolution by NFP to ensure Biot-Savart integration is accurate
-            source_grid = LinearGrid(N=2 * self.N * NFP + 5)
+            source_grid = LinearGrid(N=max(2 * self.N * NFP + 5, 32))
         else:
             # coil grids should have NFP=1. The only possible exception is FourierRZCoil
             # which in theory can be different as long as it matches the coils NFP.
@@ -590,7 +590,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
         """
         NFP = getattr(self, "NFP", 1)
         if source_grid is None:
-            source_grid = LinearGrid(N=2 * self.N * NFP + 5)
+            source_grid = LinearGrid(N=max(2 * self.N * NFP + 5, 32))
         else:
             errorif(
                 getattr(source_grid, "NFP", 1) not in [1, NFP],
@@ -1424,7 +1424,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         if source_grid is None:
             # NFP=1 to ensure points span the entire length of the coil
             # using more points than knots.size (self.N) to better sample coil
-            source_grid = LinearGrid(N=self.N * 2 + 5)
+            source_grid = LinearGrid(N=max(self.N * 2 + 5, 32))
         else:
             # coil grids should have NFP=1. The only possible exception is FourierRZCoil
             # which in theory can be different as long as it matches the coils NFP.
@@ -2075,7 +2075,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence[_CoilT]):
             "source_grid for CoilSet must have NFP=1",
         )
         if source_grid is None:
-            source_grid = LinearGrid(N=2 * self[0].N * getattr(self[0], "NFP", 1) + 5)
+            source_grid = LinearGrid(
+                N=max(2 * self[0].N * getattr(self[0], "NFP", 1) + 5, 32)
+            )
         assert isinstance(source_grid, _Grid)
         if params is None:
             current = self._all_currents()

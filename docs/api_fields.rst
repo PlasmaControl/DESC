@@ -115,6 +115,14 @@ another ``CoilSet``).
     desc.coils.CoilSet
     desc.coils.MixedCoilSet
 
+By default the field of a coil is computed on a ``source_grid`` of at least ``LinearGrid(N=32)``,
+which is 65 points per coil. For a coil given by a Fourier series the points needed grow roughly as
+``L / d`` for an evaluation point at distance ``d`` from a coil of length ``L``. For a circular coil of
+radius ``r``, 65 points give a relative error below 1e-6 at ``d = 0.3 r`` and about 2e-2 at ``d = 0.1 r``,
+so evaluation points that close to a coil need a finer ``source_grid``. The field of a ``SplineXYZCoil``
+is summed over straight segments between the grid points and converges only at second order in their
+number.
+
 DESC ``CoilSet`` or ``MixedCoilSet`` objects can also be created from MAKEGRID-formatted coil text files via
 the `from_makegrid_coilfile` method. They can also be saved in a MAKEGRID-formatted text file with
 the `save_in_makegrid_format` method.

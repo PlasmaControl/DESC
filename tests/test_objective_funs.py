@@ -112,7 +112,7 @@ from desc.profiles import (
     PowerSeriesProfile,
     ScaledProfile,
 )
-from desc.utils import PRINT_WIDTH, ResolutionWarning, safenorm
+from desc.utils import PRINT_WIDTH, ResolutionWarning, get_ess_scale, safenorm
 from desc.vmec_utils import ptolemy_linear_transform
 
 
@@ -4844,6 +4844,100 @@ def test_deflation_operator_all_Nones():
         val2,
         surf.compute("R", grid=LinearGrid(rho=1.0, theta=0.0, zeta=0.0))["R"].squeeze(),
     )
+
+
+@pytest.mark.unit
+def test_deflation_operator_ess_weighting():
+    """Test DeflationOperator with ESS weighting of the norm."""
+
+    def deflation(thing, things_to_deflate, use_jit=False, **kwargs):
+        obj = ObjectiveFunction(
+            DeflationOperator(thing, things_to_deflate, sigma=1.0, **kwargs),
+            use_jit=use_jit,
+        )
+        obj.build(verbose=0)
+        return obj.compute_unscaled(obj.x(thing))
+
+    surf = FourierRZToroidalSurface()
+    surf.change_resolution(M=4, N=2)
+    rng = np.random.default_rng(0)
+    surf2 = surf.copy()
+    surf2.R_lmn = surf2.R_lmn + 0.1 * rng.standard_normal(surf2.R_lmn.size)
+    surf2.Z_lmn = surf2.Z_lmn + 0.1 * rng.standard_normal(surf2.Z_lmn.size)
+
+    # compare to weighted norm computed by hand, with non-default ESS parameters
+    modes = {"R_lmn": surf.R_basis.modes, "Z_lmn": surf.Z_basis.modes}
+    w = get_ess_scale(modes, alpha=0.5, order=1, min_value=1e-3)
+    norm = np.sqrt(
+        np.sum((w["R_lmn"] * (surf.R_lmn - surf2.R_lmn)) ** 2)
+        + np.sum((w["Z_lmn"] * (surf.Z_lmn - surf2.Z_lmn)) ** 2)
+    )
+    val = deflation(
+        surf,
+        [surf2],
+        use_jit=True,
+        norm_weighting="ess",
+        ess_alpha=0.5,
+        ess_order=1,
+        ess_min_value=1e-3,
+    )
+    np.testing.assert_allclose(val, 1 / norm**2 + 1)
+    # the weighting should actually change the value
+    unweighted_norm = np.linalg.norm(
+        np.concatenate([surf.R_lmn - surf2.R_lmn, surf.Z_lmn - surf2.Z_lmn])
+    )
+    np.testing.assert_allclose(deflation(surf, [surf2]), 1 / unweighted_norm**2 + 1)
+    assert not np.isclose(val, 1 / unweighted_norm**2 + 1)
+
+    # weights must line up with a subset of deflated params (Z diff is ignored)
+    idx = np.array([0, 3, 5, 10])
+    w_R = get_ess_scale(modes)["R_lmn"][idx]
+    norm = np.linalg.norm(w_R * (surf.R_lmn - surf2.R_lmn)[idx])
+    val = deflation(
+        surf,
+        [surf2, None],
+        norm_weighting="ess",
+        params_to_deflate_with={"R_lmn": idx},
+        multiple_deflation_type="sum",
+    )
+    np.testing.assert_allclose(val, 1 / norm**2 + 1)
+
+    # differences of the same size are farther apart (smaller M) in a low order mode
+    # than in a high order mode with ESS weighting, but the same without weighting
+    surf_low = surf.copy()
+    surf_low.R_lmn = surf_low.R_lmn.at[surf.R_basis.get_idx(M=1, N=0)].add(0.1)
+    surf_high = surf.copy()
+    surf_high.R_lmn = surf_high.R_lmn.at[surf.R_basis.get_idx(M=4, N=0)].add(0.1)
+    np.testing.assert_allclose(
+        deflation(surf, [surf_low]), deflation(surf, [surf_high])
+    )
+    assert deflation(surf, [surf_low], norm_weighting="ess") < deflation(
+        surf, [surf_high], norm_weighting="ess"
+    )
+
+    # works for collections, where params_dict is a list of dicts
+    coil = FourierRZCoil(
+        current=1e6,
+        R_n=[10, 1, 0.3, 0.1],
+        Z_n=[0.5, 0.2],
+        modes_R=[0, 1, 2, 3],
+        modes_Z=[-1, -2],
+    )
+    coilset = CoilSet(coil, coil.copy())
+    coilset2 = coilset.copy()
+    coilset2[0].R_n = coilset2[0].R_n + 0.1 * rng.standard_normal(4)
+    coilset2[1].Z_n = coilset2[1].Z_n + 0.1 * rng.standard_normal(3)
+    coilset2[1].current = coilset2[1].current + 0.05  # non-spectral, weight 1
+    w = coilset.pack_params(coilset._get_ess_scale())
+    diff = coilset.pack_params(coilset.params_dict) - coilset2.pack_params(
+        coilset2.params_dict
+    )
+    norm = np.linalg.norm(w * diff)
+    val = deflation(coilset, [coilset2], norm_weighting="ess")
+    np.testing.assert_allclose(val, 1 / norm**2 + 1)
+
+    with pytest.raises(ValueError, match="norm_weighting"):
+        DeflationOperator(surf, [surf2], norm_weighting="foo")
 
 
 @pytest.mark.unit

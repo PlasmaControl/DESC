@@ -28,6 +28,7 @@ New Features
 - Adds ``scale_invariant`` argument to quasi-symmetry objectives (i.e. ``QuasisymmetryTwoTerm``, ``QuasisymmetryTripleProduct`` and ``QuasisymmetryBoozer``) that introduces the normalized alternatives for the objective functions with the actual evaluated local magnetic field information instead of the precomputed constant normalization. Similarly, the definition of `f_C` and `f_T` of `plot_qs_error` is changed, the flux surface average is now take over the normalized quantity whereas previously the flux surface average was applied to each term separately before normalization. For more details on these quantities, see [Basic Optimization tutorial](https://desc-docs.readthedocs.io/en/latest/notebooks/tutorials/basic_optimization.html).
 - Adds ``NeutronWallLoading`` objective to compute the neutron wall loading (MW/m²) on a chosen/optimized surface.
 - Adds Python type hints for many API functions. Allows for better autocomplete and error checking when writing DESC scripts in common IDEs.
+- Adds ``norm_weighting="ess"`` option to ``DeflationOperator``, which weights the parameter differences in the deflation norm with the exponential spectral scaling (the same as ``x_scale="ess"`` in ``Optimizer.optimize``), so that differences in low order modes count more towards the distance between states than differences in high order modes. The weighting is controlled with the new ``ess_alpha``, ``ess_order`` and ``ess_min_value`` arguments.
 
 Performance Improvements
 
@@ -82,7 +83,9 @@ Bug Fixes
 - Fixes wrong signs in ``w_Boozer_mn`` for non-stellarator-symmetric equilibria, which made the Boozer transform (``nu``, ``theta_B``, ``zeta_B``, the Boozer harmonics such as ``|B|_mn_B``, ``QuasisymmetryBoozer``, ``make_boozmn_output`` etc.) incorrect for asymmetric equilibria. Results for stellarator-symmetric equilibria are unchanged. Asymmetric ``make_boozmn_output`` outputs (including ``pmnc_b``) now agree with the hidden symmetries ``booz_xform``, so the warning about the sign of ``numnc`` has been removed.
 - Ensures that ``SurfaceCurrentRegularization.normalization`` has the correct units for every ``regularization`` option.
 - Fixes inaccuracy in derivative when equilibrium boundary sheet current is present and non-negligible in ``BoundaryError`` objective.
-
+- Fixes bug in FixNearAxis constraints when L>M, where it would not fully fix the equilibrium behavior to the NAE.
+- Fixes ``FixNearAxisR``/``FixNearAxisZ`` (and ``get_NAE_constraints``) with ``order=2`` and no ``Qsc`` target, which fixed the O(rho^2) behavior to zero instead of to the equilibrium's current near-axis behavior. The O(rho^2) constraints also now respect a toroidal resolution ``N`` smaller than the equilibrium's, like the lower-order constraints do.
+- ``FixNearAxisLambda`` now raises a ``NotImplementedError`` for ``order>1`` instead of silently constraining only up to O(rho).
 
 v0.17.3
 -------

@@ -13,7 +13,7 @@ from scipy.special import ellipe, ellipk, ellipkm1
 from tests.test_interp_utils import _c_1d, _c_1d_nyquist_freq, _c_2d, _c_2d_nyquist_freq
 from tests.test_plotting import tol_1d
 
-from desc.backend import jnp, vmap
+from desc.backend import jax, jnp, vmap
 from desc.basis import FourierZernikeBasis
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid
@@ -47,12 +47,16 @@ from desc.integrals.quad_utils import (
     tanh_sinh,
 )
 from desc.integrals.singularities import (
+    _can_linearize,
     _get_quadrature_nodes,
     _kernel_nr_over_r3,
     _local_params,
+    _singular_integral,
+    _singular_integral_linearized,
     _vanilla_params,
     best_params,
     best_ratio,
+    kernels,
 )
 from desc.integrals.surface_integral import _get_grid_surface
 from desc.transform import Transform
@@ -644,6 +648,76 @@ class TestSingularities:
         data = eq.compute(_kernel_nr_over_r3.keys + ["|e_theta x e_zeta|"], grid=grid)
         err = singular_integral(data, data, "nr_over_r3", interpolator, chunk_size=50)
         np.testing.assert_array_less(np.abs(2 * np.pi + err), es)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("kernel", ["biot_savart", "biot_savart_A", "1_over_r"])
+    @pytest.mark.parametrize("chunk_size", [None, 7])
+    @pytest.mark.parametrize("even", [False, True])
+    def test_singular_integral_linearized(self, kernel, chunk_size, even):
+        """Test the matrix form of the derivative of the singular integral.
+
+        The JVP and VJP through the dense linearization should match differentiating
+        the integration routine itself.
+        """
+        eq = get("HELIOTRON")
+        if even:  # grid with nyquist modes
+            grid = LinearGrid(theta=8, zeta=6, NFP=eq.NFP)
+        else:
+            grid = LinearGrid(M=4, N=3, NFP=eq.NFP)
+        interpolator = FFTInterpolator(grid, grid, 5, 5, 6)
+        kernel = kernels[kernel]
+        assert _can_linearize(interpolator, kernel)
+        keys = kernel.keys + ["|e_theta x e_zeta|", "omega"]
+        data = eq.compute(keys, grid=grid)
+        e = {key: data[key] for key in kernel.keys}
+        s = {key: data[key] for key in keys}
+
+        def plain(e, s):
+            return _singular_integral(e, s, kernel, interpolator, chunk_size)
+
+        def linearized(e, s):
+            return _singular_integral_linearized(e, s, kernel, interpolator, chunk_size)
+
+        rng = np.random.default_rng(0)
+        de = {
+            key: jnp.asarray(rng.standard_normal(val.shape)) for key, val in e.items()
+        }
+        ds = {
+            key: jnp.asarray(rng.standard_normal(val.shape)) for key, val in s.items()
+        }
+        f1, df1 = jax.jvp(plain, (e, s), (de, ds))
+        f2, df2 = jax.jvp(linearized, (e, s), (de, ds))
+        scale = np.abs(df1).max()
+        np.testing.assert_allclose(f2, f1, rtol=1e-12, atol=1e-12 * np.abs(f1).max())
+        np.testing.assert_allclose(df2, df1, rtol=1e-9, atol=1e-11 * scale)
+
+        # reverse mode goes through the transpose of the same matrix
+        ct = jnp.asarray(rng.standard_normal(f1.shape))
+        g1 = jax.grad(lambda e, s: jnp.sum(ct * plain(e, s)), argnums=(0, 1))(e, s)
+        g2 = jax.grad(lambda e, s: jnp.sum(ct * linearized(e, s)), argnums=(0, 1))(e, s)
+        for a, b in zip(jax.tree_util.tree_leaves(g2), jax.tree_util.tree_leaves(g1)):
+            np.testing.assert_allclose(a, b, rtol=1e-9, atol=1e-11 * np.abs(b).max())
+
+        # many tangents at once, as for a jacobian
+        dss = {
+            key: jnp.asarray(rng.standard_normal((3, *val.shape)))
+            for key, val in s.items()
+        }
+        J1 = vmap(lambda ds: jax.jvp(lambda s: plain(e, s), (s,), (ds,))[1])(dss)
+        J2 = vmap(lambda ds: jax.jvp(lambda s: linearized(e, s), (s,), (ds,))[1])(dss)
+        np.testing.assert_allclose(J2, J1, rtol=1e-9, atol=1e-11 * np.abs(J1).max())
+
+    @pytest.mark.unit
+    def test_singular_integral_not_linearized(self):
+        """Test the cases where the plain derivative of the integral is kept."""
+        eq = get("HELIOTRON")
+        grid = LinearGrid(M=4, N=3, NFP=eq.NFP)
+        kernel = kernels["biot_savart"]
+        # interpolation is only a convolution for FFT interpolation on the same grid
+        assert not _can_linearize(DFTInterpolator(grid, grid, 5, 5, 6), kernel)
+        with pytest.warns(UserWarning, match="truncated"):
+            coarse = FFTInterpolator(LinearGrid(M=2, N=3, NFP=eq.NFP), grid, 5, 5, 6)
+        assert not _can_linearize(coarse, kernel)
 
     @pytest.mark.unit
     @pytest.mark.parametrize("interpolator", [FFTInterpolator, DFTInterpolator])

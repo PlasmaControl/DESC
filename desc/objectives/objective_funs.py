@@ -10,6 +10,7 @@ import numpy as np
 from desc.backend import (
     desc_config,
     execute_on_cpu,
+    jax,
     jit,
     jnp,
     tree_flatten,
@@ -919,7 +920,12 @@ class ObjectiveFunction(IOAble):
 
         fun = lambda x: getattr(self, "compute_" + op)(x, constants)
         if len(v) == 1:
-            jvpfun = lambda dx: Derivative.compute_jvp(fun, 0, dx, x)
+            if all(obj._jvp_linearize for obj in self.objectives):
+                # work that doesn't depend on the tangent is done once, rather than
+                # once for each chunk of tangents
+                _, jvpfun = jax.linearize(fun, x)
+            else:
+                jvpfun = lambda dx: Derivative.compute_jvp(fun, 0, dx, x)
             return batched_vectorize(
                 jvpfun, signature="(n)->(k)", chunk_size=self._jac_chunk_size
             )(v[0])
@@ -1258,6 +1264,12 @@ class _Objective(IOAble, ABC):
     _coordinates = ""
     _units = "(Unknown)"
     _equilibrium = False
+    # Whether JVPs with many tangents should linearize the objective once and apply
+    # that to every tangent, rather than differentiate again for each chunk of
+    # tangents. Only worth it when the expensive part of the derivative doesn't depend
+    # on the tangent (eg custom derivative rules that build a matrix) and what the
+    # linearization has to store is small.
+    _jvp_linearize = False
     _io_attrs_ = [
         "_bounds",
         "_deriv_mode",
@@ -1591,9 +1603,12 @@ class _Objective(IOAble, ABC):
 
         if self._deriv_mode == "fwd":
             fun = lambda *x: getattr(self, "compute_" + op)(*x, constants=constants)
-            jvpfun = lambda *dx: Derivative.compute_jvp(
-                fun, tuple(range(len(x))), dx, *x
-            )
+            if self._jvp_linearize:
+                _, jvpfun = jax.linearize(fun, *x)
+            else:
+                jvpfun = lambda *dx: Derivative.compute_jvp(
+                    fun, tuple(range(len(x))), dx, *x
+                )
             sig = ",".join(f"(n{i})" for i in range(len(x))) + "->(k)"
             return batched_vectorize(
                 jvpfun, signature=sig, chunk_size=self._jac_chunk_size

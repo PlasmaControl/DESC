@@ -2166,3 +2166,104 @@ def test_get_ess_scale():  # noqa: C901
     )
     np.testing.assert_allclose(eq2_scale["I"], 1)
     np.testing.assert_allclose(eq2_scale["G"], 1)
+
+
+@pytest.mark.unit
+def test_proximal_perturb_with_factors():
+    """Test the perturbation in ProximalProjection that reuses the jacobian's SVD."""
+    eq0 = desc.examples.get("DSHAPE")
+    rng = default_rng(0)
+
+    def make():
+        eq = eq0.copy()
+        objective = ObjectiveFunction(AspectRatio(eq))
+        constraint = ObjectiveFunction(ForceBalance(eq))
+        prox = ProximalProjection(
+            objective,
+            constraint,
+            eq,
+            solve_options={"solve_during_proximal_build": False},
+        )
+        prox.build(verbose=0)
+        return prox, eq
+
+    prox, eq = make()
+    ref, eq_ref = make()
+    x = prox.x(eq)
+    assert prox._eq_factors is None
+    # until the jacobian has been computed there are no factors to use
+    assert not prox._can_reuse_factorization({})
+    prox.jac_scaled_error(x)
+    assert prox._eq_factors is not None
+
+    deltas = {
+        "Rb_lmn": 2e-3 * rng.standard_normal(eq.Rb_lmn.size),
+        "Zb_lmn": 2e-3 * rng.standard_normal(eq.Zb_lmn.size),
+    }
+    assert prox._can_reuse_factorization(deltas)
+    # profile perturbations use a weighted step, which is left to Equilibrium.perturb
+    assert not prox._can_reuse_factorization({"p_l": np.ones(eq.p_l.size)})
+
+    for order in [1, 2]:
+        prox._perturb_options["order"] = order
+        prox._perturb_with_factors(deltas)
+        eq_ref.perturb(
+            deltas,
+            objective=ref._eq_solve_objective,
+            constraints=None,
+            order=order,
+            include_f=False,
+            verbose=0,
+        )
+        for key in ["R_lmn", "Z_lmn", "L_lmn", "Rb_lmn", "Zb_lmn"]:
+            np.testing.assert_allclose(
+                getattr(eq, key),
+                getattr(eq_ref, key),
+                rtol=1e-7,
+                atol=1e-9,
+                err_msg=key,
+            )
+        # back to the starting point for the next order
+        for e, p in [(eq, prox), (eq_ref, ref)]:
+            e.params_dict = eq0.params_dict
+            p._eq_solve_objective.update_constraint_target(e)
+
+    # a new point invalidates the factors
+    x_new = jnp.asarray(x).at[-1].add(1e-4)
+    prox._update_equilibrium(x_new, store=True)
+    assert prox._eq_factors is None
+
+
+@pytest.mark.unit
+def test_lsqtr_noisy_objective_termination():
+    """Test that lsqtr stops when no step within tolerance is acceptable.
+
+    When the objective is only evaluated approximately (eg it has an inner solve),
+    steps get rejected once the predicted reduction is below the error. The solver
+    should then stop, not shrink the trust region down to machine precision at a
+    function evaluation each time.
+    """
+    rng = default_rng(1)
+    A = rng.standard_normal((30, 6))
+    b = rng.standard_normal(30)
+    count = {"nfev": 0}
+
+    def fun(x):
+        count["nfev"] += 1
+        r = A @ x - b
+        # error that the jacobian doesn't know about and that isn't smooth on the
+        # scale of the steps
+        return r + 1e-4 * jnp.sin(1e9 * jnp.cumsum(x)[-1] + jnp.arange(30.0))
+
+    def jac(x):
+        return jnp.asarray(A)
+
+    out = lsqtr(
+        fun, jnp.zeros(6), jac, ftol=1e-8, xtol=1e-3, gtol=1e-12, verbose=0, maxiter=50
+    )
+    x_true = np.linalg.lstsq(A, b, rcond=None)[0]
+    np.testing.assert_allclose(out["x"], x_true, atol=1e-3)
+    assert out["success"]
+    # a few steps to the minimum of the model, then the first rejected step that is
+    # already within xtol ends it
+    assert count["nfev"] < 10

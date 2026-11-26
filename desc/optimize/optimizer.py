@@ -158,7 +158,8 @@ class Optimizer(IOAble):
             - ``"linear_constraint_options"`` : Dictionary of keyword arguments to pass
               to ``LinearConstraintProjection``.
             - ``"perturb_options"`` : Dictionary of keyword arguments to pass to
-              ``ProximalProjection`` as its ``perturb_options``.
+              ``ProximalProjection`` as its ``perturb_options``. These are the
+              arguments of ``Equilibrium.perturb``, and ``"reuse_factorization"``.
             - ``"solve_options"`` : Dictionary of keyword arguments to pass to
               ``ProximalProjection`` as its ``solve_options``.
 

@@ -187,6 +187,7 @@ Fixing degrees of freedom
     desc.objectives.FixAtomicNumber
     desc.objectives.FixElectronDensity
     desc.objectives.FixElectronTemperature
+    desc.objectives.FixIonDensity
     desc.objectives.FixIonTemperature
     desc.objectives.FixAnisotropy
     desc.objectives.FixModeR

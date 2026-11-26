@@ -21,7 +21,7 @@ def compute_scaling_factors(thing):
             np.logical_or(np.abs(basis.modes[:, 1]) > 0, np.abs(basis.modes[:, 2]) > 0)
         )[0]
 
-        val = np.max(np.abs(coeffs[inds_not_00]))
+        val = np.max(np.abs(np.asarray(coeffs)[inds_not_00]))
         if not np.isclose(val, 0, atol=1e-12):
             return val
         raise ValueError("No modes found, geometry is unphysical.")

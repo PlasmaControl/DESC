@@ -4,13 +4,19 @@ Changelog
 New Features
 
 - Adds `desc.compat.flip_magnetic_field` compatibility function to reverse the direction of an Equilibrium magnetic field.
+- ``x_scale`` can now mix exponential spectral scaling (ESS), fixed scales and automatic Jacobian/Hessian scaling in a single optimization. Each thing can be given ``'ess'``, ``'auto'``, a number, or a dict with the same keys as ``thing.params_dict`` whose values are each ``'ess'``, ``'auto'``, or a number/array, e.g. ``x_scale={**{k: 'ess' for k in eq.params_dict}, 'L_lmn': 'auto'}``. Any entry equal to 0 uses automatic scaling. Scales are relative to the magnitude of each variable, which is normalized automatically, and where linear constraints couple variables each combination of them is scaled by the average of the fixed scales of the variables in it.
 
 Breaking Changes and Deprecations
 
 - When multiplying a profile by a scalar, it now returns a new profile of the same class type with updated parameters if possible. The old code would always convert other profile types to a ``ScaledProfile`` or update the scale parameter of the original profile instance. Negating a profile (``-profile``) now behaves the same as ``-1 * profile``, instead of always wrapping it in a ``ScaledProfile``.
+- Passing a single flat array for ``x_scale`` is deprecated. Instead pass a dict (or ``'ess'``/``'auto'``/number) for each optimizable object.
+- The ``x_scale`` argument of ``LinearConstraintProjection`` (and ``options["linear_constraint_options"]["x_scale"]``) is renamed to ``x_projection_scale``, since it sets the normalization used to factorize the linear constraints, which determines the particular solution and the reduced variables, rather than the scaling the optimizer applies to them. The old name is deprecated.
+- With ``x_scale="ess"``, parameters without an ESS rule (e.g. profile coefficients, ``Psi``, coil currents) now use automatic scaling rather than a fixed scale of 1.
+- The DESC optimizers no longer set special default trust region sizes (``initial_trust_radius=1e-3``, ``max_trust_radius=1``) when ``x_scale`` is all ones.
 
 Bug Fixes
 
+- A projection scale given in ``options["linear_constraint_options"]`` is now also used for the projection of the nonlinear constraints, so that the objective and constraints are expressed in the same reduced variables.
 - Fixes ``desc.set_device("gpu")`` raising ``ValueError`` when ``CUDA_VISIBLE_DEVICES`` lists GPU UUIDs or prefixes of them.
 - Fixes ``perturb`` with NumPy array weights and with 2D weight matrices.
 - Fixes how profiles are updated in ``desc.compat`` functions to work with all profile types.

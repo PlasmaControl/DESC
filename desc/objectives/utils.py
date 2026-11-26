@@ -10,7 +10,42 @@ from desc.io import IOAble
 from desc.utils import Index, errorif, flatten_list, svd_inv_null, unique_list, warnif
 
 
-def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa: C901
+def _get_x_projection_scale(x, x_projection_scale="auto"):
+    """Scale of each variable used to factorize linear constraints.
+
+    Parameters
+    ----------
+    x : ndarray
+        Full state vector.
+    x_projection_scale : array_like or ``'auto'``
+        Scale of each variable. Automatic scaling is used for entries equal to 0,
+        or everywhere if ``'auto'``.
+
+    Returns
+    -------
+    D : ndarray
+        Scale of each variable.
+
+    """
+    x = np.asarray(x)
+    # magnitudes below 100 are left unscaled, the scaling is meant to bring
+    # variables with large values (eg currents) to order unity
+    x_auto_scale = np.where(np.abs(x) < 1e2, 1, np.abs(x))
+    if isinstance(x_projection_scale, str) and x_projection_scale == "auto":
+        return x_auto_scale
+    x_projection_scale = np.abs(np.asarray(x_projection_scale))
+    errorif(
+        x_projection_scale.shape != x.shape,
+        ValueError,
+        "x_projection_scale must be the same size as the full state vector. Got "
+        + f"size {x_projection_scale.size} for state vector of size {x.size}.",
+    )
+    return np.where(x_projection_scale == 0, x_auto_scale, x_projection_scale)
+
+
+def factorize_linear_constraints(  # noqa: C901
+    objective, constraint, x_projection_scale="auto"
+):
     """Compute and factorize A to get particular solution and nullspace.
 
     Given constraints of the form Ax=b, factorize A to find a particular solution xp
@@ -23,12 +58,10 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
         Objective function to optimize.
     constraint : ObjectiveFunction
         Objective function of linear constraints to enforce.
-    x_scale : array_like or ``'auto'``, optional
-        Characteristic scale of each variable. Setting ``x_scale`` is equivalent
-        to reformulating the problem in scaled variables ``xs = x / x_scale``.
-        If set to ``'auto'``, the scale is determined from the initial state vector.
-        This can be passed through optimizer options as
-        solve_options["linear_constraint_options"]["x_scale"].
+    x_projection_scale : array_like or ``'auto'``, optional
+        Characteristic magnitude of each variable. The particular solution is the
+        one with the smallest norm, and the null space basis is orthonormal, in the
+        normalized variables ``x / x_projection_scale``.
 
     Returns
     -------
@@ -41,7 +74,7 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     Z : ndarray
         Null space operator for full combined A such that A @ Z == 0.
     D : ndarray
-        Scale of the full state vector x, as set by the parameter ``x_scale``.
+        Scale of the full state vector x, as set by ``x_projection_scale``.
     unfixed_idx : ndarray
         Indices of x that correspond to non-fixed values.
     project, recover : function
@@ -123,18 +156,7 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     # remove fixed parameters from A and b
     A, b, xp, unfixed_idx, fixed_idx = remove_fixed_parameters(A, b, xp)
 
-    # compute x_scale if not provided
-    # Note: this x_scale is not the same as the x_scale as in solve_options["x_scale"]
-    # but the one given as solve_options["linear_constraint_options"]["x_scale"]
-    if x_scale == "auto":
-        x_scale = objective.x(*objective.things)
-    errorif(
-        x_scale.shape != xp.shape,
-        ValueError,
-        "x_scale must be the same size as the full state vector. "
-        + f"Got size {x_scale.size} for state vector of size {xp.size}.",
-    )
-    D = np.where(np.abs(x_scale) < 1e2, 1, np.abs(x_scale))
+    D = _get_x_projection_scale(objective.x(*objective.things), x_projection_scale)
 
     # null space & particular solution
     A = A * D[None, unfixed_idx]

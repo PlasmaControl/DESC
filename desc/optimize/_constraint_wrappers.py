@@ -13,13 +13,20 @@ from desc.objectives import (
     maybe_add_self_consistency,
 )
 from desc.objectives.utils import (
-    _get_auto_x_scale,
+    _get_x_projection_scale,
     _Project,
     _Recover,
     factorize_linear_constraints,
     remove_fixed_parameters,
 )
-from desc.utils import Timer, errorif, get_instance, setdefault, warnif
+from desc.utils import (
+    Timer,
+    errorif,
+    get_instance,
+    parse_argname_change,
+    setdefault,
+    warnif,
+)
 
 from .utils import f_where_x, normalize_columns
 
@@ -43,20 +50,36 @@ class LinearConstraintProjection(ObjectiveFunction):
         Objective function to optimize.
     constraint : ObjectiveFunction
         Objective function of linear constraints to enforce.
-    x_scale : array_like or ``'auto'``, optional
-        Characteristic scale of each variable. Setting ``x_scale`` is equivalent
-        to reformulating the problem in scaled variables ``xs = x / x_scale``.
-        If set to ``'auto'``, or for any entries equal to 0, the scale is determined
-        from the initial state vector. When optimizing with ``Optimizer.optimize``
-        this is set by its ``x_scale`` argument.
+    x_projection_scale : array_like or ``'auto'``, optional
+        Characteristic magnitude of each variable, used to normalize the state
+        vector before the linear constraints are factorized. The particular solution
+        is the one with the smallest norm, and the basis of the null space is
+        orthonormal, in the normalized variables ``x / x_projection_scale``. This
+        sets the reduced variables that an optimizer works with, so it also changes
+        the shape of trust regions and the effect of any scaling the optimizer
+        applies. Entries smaller than 100 in magnitude are treated as 1. If set to
+        ``'auto'``, the initial state vector is used.
     name : str
         Name of the objective function.
 
     """
 
     def __init__(
-        self, objective, constraint, x_scale="auto", name="LinearConstraintProjection"
+        self,
+        objective,
+        constraint,
+        x_projection_scale="auto",
+        name="LinearConstraintProjection",
+        **kwargs,
     ):
+        x_projection_scale = parse_argname_change(
+            x_projection_scale, kwargs, "x_scale", "x_projection_scale"
+        )
+        errorif(
+            len(kwargs) > 0,
+            TypeError,
+            f"Unexpected keyword arguments {list(kwargs)}.",
+        )
         errorif(
             not isinstance(objective, ObjectiveFunction),
             ValueError,
@@ -82,7 +105,7 @@ class LinearConstraintProjection(ObjectiveFunction):
 
         self._objective = objective
         self._constraint = constraint
-        self._x_scale = x_scale
+        self._x_projection_scale = x_projection_scale
         self._built = False
         # don't want to compile this, just use the compiled objective
         self._use_jit = False
@@ -129,7 +152,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         ) = factorize_linear_constraints(
             self._objective,
             self._constraint,
-            self._x_scale,
+            self._x_projection_scale,
         )
         # inverse of the linear constraint matrix A without any scaling. Only used
         # when the constraint target is updated, so keep it off the device.
@@ -218,16 +241,18 @@ class LinearConstraintProjection(ObjectiveFunction):
         # does not change here, but still recompute it while updating others
         A, b, xp, unfixed_idx, fixed_idx = remove_fixed_parameters(A, b, xp)
 
-        x_scale = self._x_scale
-        # D only depends on the state vector for the entries that are automatically
-        # scaled, so if there are none, D and everything computed from it is unchanged
-        if isinstance(x_scale, str) or np.any(x_scale == 0):
-            auto_x_scale = _get_auto_x_scale(self._objective.x(*self._objective.things))
+        # D only depends on the state vector where the scale is automatic, so it only
+        # needs to be updated if there are such entries
+        x_projection_scale = self._x_projection_scale
+        if isinstance(x_projection_scale, str) or np.any(
+            np.asarray(x_projection_scale) == 0
+        ):
+            self._D = jnp.asarray(
+                _get_x_projection_scale(
+                    self._objective.x(*self._objective.things), x_projection_scale
+                )
+            )
 
-            if isinstance(x_scale, str) and x_scale == "auto":
-                x_scale = auto_x_scale
-
-            self._D = jnp.where(x_scale == 0, auto_x_scale, x_scale)
             # since D has changed, we need to update the ADinv
             # as mentioned above A does not change, so we can use the same Ainv
             # pinv(A) = Ainv, ADinv = pinv(A @ D) = Dinv @ Ainv, Dinv = 1 / D
@@ -599,7 +624,7 @@ class ProximalProjection(ObjectiveFunction):
             )
         self._objective = objective
         self._constraint = constraint
-        solve_options = {} if solve_options is None else solve_options
+        solve_options = {} if solve_options is None else dict(solve_options)
         self._solve_during_proximal_build = solve_options.pop(
             "solve_during_proximal_build", True
         )  # If user does not want the solve during build, mainly for debug purposes

@@ -24,6 +24,7 @@ from desc.utils import (
     flatten_list,
     get_instance,
     is_any_instance,
+    parse_argname_change,
     unique_list,
     warnif,
 )
@@ -151,10 +152,13 @@ class Optimizer(IOAble):
             scaled automatically, pass ``x_scale={**{k: 'ess' for k in eq.params_dict},
             'L_lmn': 'auto'}``. Anywhere the scale is 0, automatic jacobian
             scaling will be used. Passing a single array for all things is deprecated.
-            Where a linear constraint couples variables with a fixed scale to
-            variables with automatic scaling, the coupled variables are not scaled
-            adaptively, and the automatic ones are only scaled according to the
-            magnitude of their initial values.
+            Scales are relative to the normalization of each variable used to project
+            out linear constraints, which is set from the magnitude of the initial
+            values unless ``x_projection_scale`` is given in
+            ``options["linear_constraint_options"]``. Where linear constraints couple
+            variables, each combination of them is scaled by the average of the fixed
+            scales of the variables in it, and only combinations made up entirely of
+            automatically scaled variables are scaled adaptively.
         verbose : integer, optional
             * 0  : work silently.
             * 1 : display a termination report.
@@ -166,7 +170,9 @@ class Optimizer(IOAble):
             settings. Options that are universal to all optimizers are:
 
             - ``"linear_constraint_options"`` : Dictionary of keyword arguments to pass
-              to ``LinearConstraintProjection``.
+              to ``LinearConstraintProjection``, such as ``x_projection_scale`` to set
+              the normalization used to factorize the linear constraints, which is
+              separate from ``x_scale``.
             - ``"perturb_options"`` : Dictionary of keyword arguments to pass to
               ``ProximalProjection`` as its ``perturb_options``.
             - ``"solve_options"`` : Dictionary of keyword arguments to pass to
@@ -282,17 +288,7 @@ class Optimizer(IOAble):
             nonlinear_constraint = None
             if not objective.built:
                 objective.build(verbose=verbose)
-            errorif(
-                _has_fixed_scale(x_scale, things),
-                ValueError,
-                "x_scale must be 'auto' when the objective is a "
-                "LinearConstraintProjection, since its scale is set when it is "
-                "created. Pass x_scale to LinearConstraintProjection instead.",
-            )
-            # the projection's own scale is the one used in its D matrix
-            x_scale_projected = objective._x_scale
-            if isinstance(x_scale_projected, str):
-                x_scale_projected = jnp.zeros(objective._objective.dim_x)
+            x_scale_projected = _project_x_scale_prox(x_scale, things, objective)
             x_scale_projected = _project_x_scale_linear(
                 x_scale_projected, things, objective
             )
@@ -424,13 +420,6 @@ def _flatten_like(x_scale, things):
 def _is_flat_array(spec):
     """Whether spec is a non-scalar array of scales."""
     return isinstance(spec, (jnp.ndarray, np.ndarray)) and np.ndim(spec) > 0
-
-
-def _has_fixed_scale(x_scale, things):
-    """Whether any parsed x_scale entry is a fixed scale rather than adaptive."""
-    return any(
-        np.any(np.asarray(t.pack_params(s)) != 0) for s, t in zip(x_scale, things)
-    )
 
 
 def _parse_x_scale(x_scale, things, options):
@@ -573,18 +562,22 @@ def _project_x_scale_linear(x_scale, things, objective):
         x_scale = jnp.concatenate(x_scale)
 
     if isinstance(objective, LinearConstraintProjection):
-        # The fixed (nonzero) scales are already included in the D matrix of the
-        # projection, so the optimizer only needs to know which of the reduced
-        # variables to scale adaptively (0) and which not to scale further (1).
-        # The feasible tangents are D @ Z with zero rows for the fixed parameters,
-        # and the columns of Z have unit norm, so the sum below is the fraction of
-        # each reduced variable that lies on variables with a fixed scale. A reduced
-        # variable is only adaptive if that is zero, up to round-off in Z.
+        # The D matrix of the projection only normalizes magnitudes, so the fixed
+        # scales are applied to the reduced variables as the mean of the fixed
+        # scales of the full variables making up each one, weighted by the squared
+        # entries of the (unit norm) columns of Z. The feasible tangents are D @ Z
+        # with zero rows for the fixed parameters. Reduced variables with no part on
+        # variables with a fixed scale are scaled adaptively (0).
         Z = objective._feasible_tangents / objective._D[:, None]
         x_scale = jnp.broadcast_to(x_scale, objective._objective.dim_x)
         has_fixed_scale = x_scale != 0
         fixed_weight = (Z**2 * has_fixed_scale[:, None]).sum(axis=0)
-        x_scale = jnp.where(fixed_weight > np.finfo(Z.dtype).eps * max(Z.shape), 1, 0)
+        weighted = (Z**2 * x_scale[:, None]).sum(axis=0)
+        is_fixed = fixed_weight > np.finfo(Z.dtype).eps * max(Z.shape)
+        x_scale = jnp.where(
+            is_fixed, weighted / jnp.where(is_fixed, fixed_weight, 1), 0
+        )
+
     return x_scale
 
 
@@ -829,17 +822,19 @@ def get_combined_constraint_objectives(  # noqa: C901
 
     # wrap to handle linear constraints
     if linear_constraint is not None:
-        linear_constraint_options = options.pop("linear_constraint_options", {})
-        errorif(
-            "x_scale" in linear_constraint_options,
-            ValueError,
-            "x_scale can't be passed through linear_constraint_options, it is set by "
-            "the x_scale argument of the optimizer.",
+        linear_constraint_options = dict(options.pop("linear_constraint_options", {}))
+        # the objective and constraints need the same reduced variables, so their
+        # projections must use the same scale
+        x_projection_scale = parse_argname_change(
+            linear_constraint_options.pop("x_projection_scale", "auto"),
+            linear_constraint_options,
+            "x_scale",
+            "x_projection_scale",
         )
         objective = LinearConstraintProjection(
             objective,
             linear_constraint,
-            x_scale=x_scale,
+            x_projection_scale=x_projection_scale,
             **linear_constraint_options,
         )
         objective.build(verbose=verbose)
@@ -847,7 +842,7 @@ def get_combined_constraint_objectives(  # noqa: C901
             nonlinear_constraint = LinearConstraintProjection(
                 nonlinear_constraint,
                 linear_constraint,
-                x_scale=x_scale,
+                x_projection_scale=x_projection_scale,
             )
             nonlinear_constraint.build(verbose=verbose)
 

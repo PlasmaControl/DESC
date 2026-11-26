@@ -2024,7 +2024,12 @@ def test_ess_scaling_with_proximal():
         copy=True,
         options={
             "perturb_options": {"verbose": 0, "order": 1},
-            "solve_options": {"verbose": 0, "maxiter": 2},
+            "solve_options": {
+                "verbose": 0,
+                "maxiter": 2,
+                "x_scale": "ess",
+                "options": {"ess_alpha": 2},
+            },
         },
     )
 
@@ -2371,43 +2376,55 @@ def test_linear_constraint_x_scale():
     constraints = maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq=eq))
     con = ObjectiveFunction(constraints)
 
-    # a numpy array is accepted, and zeros use the automatic scale
-    x_scale = np.full(eq.dim_x, 2.0)
-    x_scale[::2] = 0
-    lcp = LinearConstraintProjection(obj, con, x_scale=x_scale)
+    # a fixed scale can be combined with a pre-built projection, since the
+    # projection only normalizes magnitudes
+    _, out = Optimizer("lsq-exact").optimize(
+        eq, LinearConstraintProjection(obj, con), x_scale="ess", maxiter=1, copy=True
+    )
+    np.testing.assert_allclose(
+        eq.pack_params(out["x_scale"][0]), eq.pack_params(eq._get_ess_scale())
+    )
+    # the projection's own scale is set separately, and the old name is deprecated
+    # given scales are used as is, and zeros use the automatic scale
+    xps = np.full(eq.dim_x, 2.0)
+    xps[::2] = 0
+    lcp = LinearConstraintProjection(obj, con, x_projection_scale=xps)
     lcp.build(verbose=0)
-    np.testing.assert_allclose(lcp._D[x_scale != 0], 2.0)
-    assert (lcp._D[x_scale == 0] >= 1).all()
-
-    # the scale of a pre-built projection is fixed when it is created
-    with pytest.raises(ValueError, match="must be 'auto'"):
-        Optimizer("lsq-exact").optimize(
-            eq, LinearConstraintProjection(obj, con), x_scale="ess", maxiter=1
-        )
-    # and the scale used to build a projection is set by x_scale, not the options
-    with pytest.raises(ValueError, match="linear_constraint_options"):
+    x0 = np.abs(eq.pack_params(eq.params_dict))
+    np.testing.assert_allclose(lcp._D[xps != 0], 2.0)
+    np.testing.assert_allclose(lcp._D[xps == 0], np.where(x0 < 1e2, 1, x0)[xps == 0])
+    with pytest.warns(FutureWarning, match="renamed to x_projection_scale"):
+        lcp = LinearConstraintProjection(obj, con, x_scale=xps)
+    assert lcp._x_projection_scale is xps
+    with pytest.warns(FutureWarning, match="renamed to x_projection_scale"):
         Optimizer("lsq-exact").optimize(
             eq,
             obj,
             constraints,
             maxiter=1,
+            copy=True,
             options={"linear_constraint_options": {"x_scale": "auto"}},
         )
+
+    lcp = LinearConstraintProjection(obj, con)
+    lcp.build(verbose=0)
+    # nullspace of the scaled constraints, with zero rows for the fixed parameters
+    Z = np.asarray(lcp._feasible_tangents) / np.asarray(lcp._D)[:, None]
 
     def reduced_scale(spec):
         """Scale the optimizer sees for the reduced variables, 0 means adaptive."""
         xsc = eq.pack_params(_parse_x_scale(spec, [eq], {})[0])
-        lcp = LinearConstraintProjection(obj, con, x_scale=xsc)
-        lcp.build(verbose=0)
-        return np.asarray(_project_x_scale_linear(xsc, [eq], lcp))
+        return np.asarray(_project_x_scale_linear(xsc, [eq], lcp)), xsc
 
-    assert (reduced_scale("auto") == 0).all()
-    assert (reduced_scale(1.0) == 1).all()
-    # A reduced variable is only adaptive if none of the variables that make it up
-    # have a fixed scale, so at most the lambda coefficients can be adaptive here.
-    spec = {key: 1.0 for key in eq.params_dict}
+    assert (reduced_scale("auto")[0] == 0).all()
+    # for fixed scales, each reduced variable gets the average scale of the full
+    # variables making it up, weighted by the squared entries of Z
+    ess, S = reduced_scale("ess")
+    np.testing.assert_allclose(ess, np.diag(Z.T @ np.diag(S) @ Z))
+    # a reduced variable is only adaptive if none of the variables that make it up
+    # have a fixed scale, which here can only be lambda coefficients
+    spec = {key: 2.0 for key in eq.params_dict}
     spec["L_lmn"] = "auto"
-    mixed = reduced_scale(spec)
-    assert set(np.unique(mixed)) <= {0, 1}
-    assert mixed.sum() > 0
-    assert (mixed == 0).sum() <= eq.L_basis.num_modes
+    mixed, _ = reduced_scale(spec)
+    np.testing.assert_allclose(mixed[mixed != 0], 2.0)
+    assert 0 < (mixed == 0).sum() <= eq.L_basis.num_modes

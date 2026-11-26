@@ -2420,10 +2420,13 @@ class Equilibrium(IOAble, Optimizable):
             scaled automatically, pass ``x_scale={**{k: 'ess' for k in eq.params_dict},
             'L_lmn': 'auto'}``. Anywhere the scale is 0, automatic jacobian
             scaling will be used. Passing a single array for all things is deprecated.
-            Where a linear constraint couples variables with a fixed scale to
-            variables with automatic scaling, the coupled variables are not scaled
-            adaptively, and the automatic ones are only scaled according to the
-            magnitude of their initial values.
+            Scales are relative to the normalization of each variable used to project
+            out linear constraints, which is set from the magnitude of the initial
+            values unless ``x_projection_scale`` is given in
+            ``options["linear_constraint_options"]``. Where linear constraints couple
+            variables, each combination of them is scaled by the average of the fixed
+            scales of the variables in it, and only combinations made up entirely of
+            automatically scaled variables are scaled adaptively.
         options : dict
             Dictionary of additional options to pass to optimizer.
         verbose : int
@@ -2548,10 +2551,13 @@ class Equilibrium(IOAble, Optimizable):
             scaled automatically, pass ``x_scale={**{k: 'ess' for k in eq.params_dict},
             'L_lmn': 'auto'}``. Anywhere the scale is 0, automatic jacobian
             scaling will be used. Passing a single array for all things is deprecated.
-            Where a linear constraint couples variables with a fixed scale to
-            variables with automatic scaling, the coupled variables are not scaled
-            adaptively, and the automatic ones are only scaled according to the
-            magnitude of their initial values.
+            Scales are relative to the normalization of each variable used to project
+            out linear constraints, which is set from the magnitude of the initial
+            values unless ``x_projection_scale`` is given in
+            ``options["linear_constraint_options"]``. Where linear constraints couple
+            variables, each combination of them is scaled by the average of the fixed
+            scales of the variables in it, and only combinations made up entirely of
+            automatically scaled variables are scaled adaptively.
         options : dict
             Dictionary of additional options to pass to optimizer.
         verbose : int

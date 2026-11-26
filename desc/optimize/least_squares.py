@@ -399,15 +399,8 @@ def lsqtr(  # noqa: C901
                 max_dx=max_dx,
             )
             if success is None and actual_reduction <= 0:
-                # The step was rejected, and the tests above only pass for a step
-                # that is accepted. But if the rejected step is already within xtol
-                # then no step that can still be accepted is longer than the
-                # tolerance. Without this the trust region keeps shrinking, at one
-                # function evaluation each time, until a step of almost no length is
-                # accepted. That is the usual way for the solve to end when fun is
-                # only evaluated approximately, eg when it involves an inner solve.
-                # There is no such test for ftol: the predicted reduction of a
-                # rejected step is not a reliable bound on what a smaller step gains.
+                # if rejected step already within xtol, stop instead of shrinking the
+                # trust region. A smaller trust radius cannot find a larger step
                 dx_norm = step_h_norm if scaled_termination else step_norm
                 if dx_norm < xtol * (xtol + x_norm):
                     success = True

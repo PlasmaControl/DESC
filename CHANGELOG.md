@@ -1,6 +1,34 @@
 Changelog
 =========
 
+Performance Improvements
+
+- Less overhead when updating the targets of linear constraints and reading ``params_dict``, which adds up when an equilibrium is perturbed and re-solved many times (eg in ``ProximalProjection``), especially on a GPU.
+
+
+v0.17.4
+-------
+
+New Features
+
+- Adds `desc.compat.flip_magnetic_field` compatibility function to reverse the direction of an Equilibrium magnetic field.
+
+Breaking Changes and Deprecations
+
+- When multiplying a profile by a scalar, it now returns a new profile of the same class type with updated parameters if possible. The old code would always convert other profile types to a ``ScaledProfile`` or update the scale parameter of the original profile instance. Negating a profile (``-profile``) now behaves the same as ``-1 * profile``, instead of always wrapping it in a ``ScaledProfile``.
+
+Bug Fixes
+
+- Fixes ``desc.set_device("gpu")`` raising ``ValueError`` when ``CUDA_VISIBLE_DEVICES`` lists GPU UUIDs or prefixes of them.
+- Fixes ``perturb`` with NumPy array weights and with 2D weight matrices.
+- Fixes how profiles are updated in ``desc.compat`` functions to work with all profile types.
+- Casts ``MTanhProfile`` params input to an array.
+- Fixes ``GenericObjective`` returning one value per node of the grid for quantities that depend on only ``theta`` or only ``zeta`` (such as ``A(z)`` and ``perimeter(z)``). As is already done for quantities that depend on only ``rho``, it now returns one value per unique ``theta`` or ``zeta``, so the length of its output, and of any ``target``, ``bounds`` or ``weight`` array given for such a quantity, is now ``grid.num_theta`` or ``grid.num_zeta`` instead of ``grid.num_nodes``.
+
+
+v0.17.4
+-------
+
 New Features
 
 - Adds ``desc.external.agni.AgniStability``, the squared growth rate of the most unstable finite-n ideal MHD mode computed by the external AGNI solver (``pip install agnimhd``), with its gradient for optimization.
@@ -11,6 +39,7 @@ New Features
 
 Performance Improvements
 
+- Avoids numerous small JAX compilations when building and solving an equilibrium at a new resolution, by doing index and mode bookkeeping in ``Grid``, ``Optimizable.x_idx`` and ``compute_scaling_factors`` with NumPy instead of eager JAX operations.
 - Reduces memory use of Boozer harmonic projections and their derivatives by contracting the poloidal and toroidal Fourier factors separately.
 - Improves memory management to reduce the base memory used during optimization while using `lsq-exact`, `lsq-auglag` and `fmin-auglag` optimizers.
 - Sparse reverse-mode differentiation was introduced to yield significant performance improvements [#2170](https://github.com/PlasmaControl/DESC/pull/2170). Plumbing to use this method was added that will be progressively taken advantage of in the future.
@@ -25,6 +54,8 @@ Performance Improvements
 - ``ProximalProjection`` reuses the factorization of the equilibrium constraint jacobian from the last accepted point to perturb the equilibrium for each trial step, instead of recomputing the jacobian and its SVD. Can be turned off with ``perturb_options={"reuse_factorization": False}``.
 - Less overhead when updating the targets of linear constraints and reading ``params_dict``, which adds up when an equilibrium is perturbed and re-solved many times (eg in ``ProximalProjection``), especially on a GPU.
 - ``lsq-exact`` (and ``proximal-lsq-exact``) stops when a rejected step is already smaller than ``xtol`` instead of shrinking the trust region until a step of negligible size is accepted. This saves many function evaluations at the end of an optimization when the objective is only evaluated approximately, as with ``ProximalProjection``.
+- ``field_line_integrate`` no longer recompiles its ODE solver on every call: repeated calls with the same inputs reuse the compiled solver.
+- Stores the surface labels ``rho`` and ``zeta`` as floats, so that surfaces labelled with an int or a float share compiled code.
 
 Breaking Changes and Deprecations
 
@@ -34,11 +65,11 @@ Breaking Changes and Deprecations
 - ``rotation_matrix`` utility function now accepts either an axis and an angle as arguments (previous behavior), OR a vector and a vector. In the latter case, the rotation matrix returned will rotate the first vector onto the second, using quaternions which avoids the NaN gradient issue that the axis-angle form can have at vertical normals. Note that these are positional arguments, and the kwargs ``axis`` and ``angle`` are now deprecated.
 - Public modules now define ``__all__`` matching the API documentation, which makes the public API explicit for IDEs, type checkers and other tools. Note that ``from desc.<module> import *`` now only imports the documented public names.
 
-
 Bug Fixes
 
-- Fixes 2nd and 3rd order terms of ``perturb`` (and so of ``Equilibrium.perturb``, ``solve_continuation`` and ``ProximalProjection``) being evaluated along a tangent that included the full value of any fixed parameter of magnitude above 100 (eg pressure, density, temperature or current profiles in SI units), which made the higher order terms worse than no correction.
+- Fixes 2nd and 3rd order terms of ``perturb`` (and so of ``Equilibrium.perturb``, ``solve_continuation`` and ``ProximalProjection``) being evaluated along a tangent that included the full value of any fixed parameter of magnitude above 100 (eg pressure, density, temperature or current profiles in SI units), which made the higher order terms worse than no correction. Note that this did not make old results incorrect, rather it just made the optimizations inefficient
 - Fixes ``VMECIO.load(profile="current")`` fitting VMEC's half-mesh ``buco`` on the full radial mesh, which shifted the current profile and its edge value.
+- Fixes ``solve_continuation(verbose=0)`` raising ``UnboundLocalError`` on its first step.
 - Fixes the ``Curve.rotmat`` setter, which crashed for list input and silently accepted arrays that were not 3x3 or of length 9.
 - Fixes two sign errors in ``c ballooning`` that made ``ideal ballooning lambda`` wrong for equilibria with ψ < 0 or ι < 0 [#2342](https://github.com/PlasmaControl/DESC/issues/2342): an extra ``sign(ψ)`` made the result depend on the direction of B, and for ι < 0 the ``zeta0`` shift of ∇α in ``c ballooning`` had the opposite sign from ``gds2``, so the growth rate grew without bound with ``zeta0``. Results for ψ > 0 and ι > 0 are unchanged.
 - Fixes ``VMECIO.load`` fitting lambda as if ``lmns`` were on the full radial mesh. VMEC stores lambda on the half mesh, so the fitted lambda was shifted by half a radial cell and pulled towards the zero placeholder row at the axis, which gave errors of order 0.1% in ``|B|`` of loaded equilibria. See [#2351](https://github.com/PlasmaControl/DESC/issues/2351). Note that the ``VMECIO.load`` guidance remains the same as before: re-solving the equilibrium in DESC  after loading from a VMEC wout is recommended given the representation differences between the two codes.
@@ -49,15 +80,8 @@ Bug Fixes
 - Fixes potential scaling-based issue in DESC-based optimization methods which use adaptive Hessian scaling (e.g. ``"fmintr"``) that could occur when the problem size was small and there were directions of near-zero derivative in the problem.
 - Fixes computation of ``CoilSetLinkingNumber`` to exclude coil writhe.
 - Adjusts the `quad_weights` of coil objectives of type `_broadcast_input = "node"` to ensure their outputs are roughly independent of grid resolution.
-- Fixes bug in modified Cholesky factorization used by the trust-region
-  subproblems when the Gershgorin lower bound of the Hessian was exactly zero
-  (e.g. a Hessian with an all-zero row), producing NaN steps in ``fmintr`` and
-  ``fmin-auglag`` with the default ``tr_method="exact"``, and in
-  ``lsq-exact``/``lsq-auglag`` with ``tr_method="cho"``.
-- Fixes the Levenberg-Marquardt parameter update in the Cholesky trust-region
-  subproblem, which often failed to converge and returned inexact steps in
-  ``fmintr`` and ``fmin-auglag`` with the default ``tr_method="exact"``, and in
-  ``lsq-exact``/``lsq-auglag`` with ``tr_method="cho"``.
+- Fixes bug in modified Cholesky factorization used by the trust-region subproblems when the Gershgorin lower bound of the Hessian was exactly zero (e.g. a Hessian with an all-zero row), producing NaN steps in ``fmintr`` and ``fmin-auglag`` with the default ``tr_method="exact"``, and in ``lsq-exact``/``lsq-auglag`` with ``tr_method="cho"``.
+- Fixes the Levenberg-Marquardt parameter update in the Cholesky trust-region subproblem, which often failed to converge and returned inexact steps in ``fmintr`` and ``fmin-auglag`` with the default ``tr_method="exact"``, and in ``lsq-exact``/``lsq-auglag`` with ``tr_method="cho"``.
 - Stops `ProximalProjection` from mutating `solve_options` during iterations.
 - Fixes ``FourierRZCoil``, ``SplineXYZCoil`` and other coils' ``compute_magnetic_field`` and ``compute_magnetic_vector_potential`` removing ``current`` from the caller's ``params`` dictionary when it was used to override the coil current, which made repeated calls with the same ``params`` silently use the coil's stored current instead.
 - Fixed bug that occured when passing in ``_surf_batch_size`` kwarg to ``Omnigenity`` and ``QuasisymmetryBoozer`` objectives
@@ -68,6 +92,7 @@ Bug Fixes
 - Fixes ``InputReader`` rejecting DESC input files whose lines are indented, which previously failed with ``The following line is not a valid input``.
 - Fixes wrong signs in ``w_Boozer_mn`` for non-stellarator-symmetric equilibria, which made the Boozer transform (``nu``, ``theta_B``, ``zeta_B``, the Boozer harmonics such as ``|B|_mn_B``, ``QuasisymmetryBoozer``, ``make_boozmn_output`` etc.) incorrect for asymmetric equilibria. Results for stellarator-symmetric equilibria are unchanged. Asymmetric ``make_boozmn_output`` outputs (including ``pmnc_b``) now agree with the hidden symmetries ``booz_xform``, so the warning about the sign of ``numnc`` has been removed.
 - Ensures that ``SurfaceCurrentRegularization.normalization`` has the correct units for every ``regularization`` option.
+- Fixes inaccuracy in derivative when equilibrium boundary sheet current is present and non-negligible in ``BoundaryError`` objective.
 
 
 v0.17.3
